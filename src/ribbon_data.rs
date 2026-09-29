@@ -681,3 +681,31 @@ pub fn decide_levels(widths: &[GroupWidths], max_w: f32) -> Vec<Level> {
     levels
 }
 
+
+/// Office Fluent 外观尺寸规格（px @96dpi，见 docs/office-ribbon-style-notes.md §9）。
+pub mod metrics {
+    /// 标签行高。
+    pub const TAB_STRIP_H: f32 = 30.0;
+    /// 工具内容区高（组名除外）。
+    pub const TOOL_AREA_H: f32 = 66.0;
+    /// 组名行高。
+    pub const GROUP_LABEL_H: f32 = 16.0;
+    /// 大按钮宽。
+    pub const LARGE_W: f32 = 56.0;
+    /// 大按钮高。
+    pub const LARGE_H: f32 = 62.0;
+    /// 大按钮图标。
+    pub const LARGE_ICON: f32 = 30.0;
+    /// 横排小按钮高。
+    pub const SMALL_H: f32 = 22.0;
+    /// 小图标尺寸。
+    pub const SMALL_ICON: f32 = 16.0;
+    /// 图标列宽。
+    pub const MINI_W: f32 = 26.0;
+    /// 组合框高。
+    pub const COMBO_H: f32 = 20.0;
+    /// 组水平内边距。
+    pub const GROUP_PAD_X: f32 = 6.0;
+    /// 分隔线上下缩进。
+    pub const SEP_INSET: f32 = 4.0;
+}

@@ -37,8 +37,8 @@ pub use cad_demo::ribbon_data::*;
 // RibbonBar 视图
 // ---------------------------------------------------------------------------
 
-const TAB_STRIP_H: f32 = 32.0;
-const CONTENT_H: f32 = 92.0;
+const TAB_STRIP_H: f32 = 30.0;
+const CONTENT_H: f32 = 82.0;
 
 pub struct RibbonBar {
     pub active: usize,
@@ -194,33 +194,41 @@ impl RibbonBar {
                         .hover(move |s| s.bg(ot.title_bg))
                 })
                 .child(name)
-                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                .on_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
                     this.active = ix;
+                    // Office 经典行为：双击标签折叠/展开功能区
+                    if event.click_count() >= 2 {
+                        this.collapsed = !this.collapsed;
+                    }
                     cx.notify();
                 }))
         }));
 
-        // 上下文标签：第二主题色、位置更高（demo 常显；真实应用随对象选择出现）
-        strip = strip.child(
-            div()
-                .id("tab-contextual")
-                .mt(px(-6.0))
-                .h(px(TAB_STRIP_H))
-                .px_3()
-                .flex()
-                .flex_col()
-                .items_center()
-                .justify_center()
-                .rounded_t_sm()
-                .bg(ot.ctx_bg)
-                .cursor_pointer()
-                .child(
-                    div().text_size(px(7.5)).text_color(ot.ctx_text).child("打印工具"),
-                )
-                .child(
-                    div().text_size(px(12.5)).text_color(ot.ctx_text).child("打印格式"),
-                ),
-        );
+        // 上下文标签：第二主题色、位置更高；仅当有贴住的绘图工具时出现
+        // （对应 Office 选中图片时出现 Picture Tools）
+        let tool_stuck = snap.active_tool.is_some();
+        strip = strip.when(tool_stuck, |strip| {
+            strip.child(
+                div()
+                    .id("tab-contextual")
+                    .mt(px(-6.0))
+                    .h(px(TAB_STRIP_H))
+                    .px_3()
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .justify_center()
+                    .rounded_t_sm()
+                    .bg(ot.ctx_bg)
+                    .cursor_pointer()
+                    .child(
+                        div().text_size(px(7.5)).text_color(ot.ctx_text).child("打印工具"),
+                    )
+                    .child(
+                        div().text_size(px(12.5)).text_color(ot.ctx_text).child("打印格式"),
+                    ),
+            )
+        });
 
         strip = strip.child(div().flex_1());
 
