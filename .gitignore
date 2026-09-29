@@ -3,3 +3,4 @@ target/
 *.png
 !docs/*.png
 fix_*.js
+tmp_shots/*.png
