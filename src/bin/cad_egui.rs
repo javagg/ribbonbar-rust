@@ -162,10 +162,10 @@ impl CadEgui {
                     ui.set_height(30.0);
                     {
                         let Self { model, icons, .. } = self;
-                        quick_button(ui, icons, "qa-new", "ui/doc_new.svg", "新建", "new", model);
-                        quick_button(ui, icons, "qa-open", "ui/folder_open.svg", "打开", "open", model);
-                        quick_button(ui, icons, "qa-save", "ui/save.svg", "保存", "save", model);
-                        quick_button(ui, icons, "qa-print", "ui/print.svg", "打印", "plot", model);
+                        quick_button(ui, icons, "ui/doc_new.svg", "新建", "new", model);
+                        quick_button(ui, icons, "ui/folder_open.svg", "打开", "open", model);
+                        quick_button(ui, icons, "ui/save.svg", "保存", "save", model);
+                        quick_button(ui, icons, "ui/print.svg", "打印", "plot", model);
                         let undo_labels: Vec<String> = model.undo_stack.iter().rev().cloned().collect();
                         let redo_labels: Vec<String> = model.redo_stack.iter().rev().cloned().collect();
                         history_button(
@@ -224,7 +224,7 @@ impl CadEgui {
 
                 egui::ScrollArea::horizontal()
                     .id_salt("ribbon-scroll")
-                    .auto_shrink(false)
+                    .auto_shrink([false, true])
                     .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     for ((gi, group), level) in tab.groups.iter().enumerate().zip(levels) {
@@ -364,6 +364,11 @@ impl CadEgui {
 }
 
 impl eframe::App for CadEgui {
+    // demo 不持久化 UI 状态（菜单开合、tiles 布局每次从代码初始化）
+    fn persist_egui_memory(&self) -> bool {
+        false
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.ribbon_panel(ui);
         self.status_panel(ui);
@@ -445,38 +450,103 @@ impl egui_tiles::Behavior<Pane> for DockBehavior<'_> {
     }
 }
 
-// ── Ribbon 小部件 ───────────────────────────────────────────────────────────
+// ── Ribbon 小部件（自绘原语：三态背景 + 居中图标 + 自绘箭头）────────────────
 
-fn tool_fill(active: bool) -> Color32 {
-    if active {
+/// 工具按钮统一背景：按下 > 贴住 > 悬停。
+fn tool_bg(r: &egui::Response, active: bool) -> Color32 {
+    if r.is_pointer_button_down_on() {
+        Color32::from_rgba_unmultiplied(6, 150, 215, 128)
+    } else if active {
         accent_active()
+    } else if r.hovered() {
+        Color32::from_rgba_unmultiplied(6, 150, 215, 38)
     } else {
         Color32::TRANSPARENT
     }
 }
 
+/// 在矩形中心绘制图标纹理。
+fn paint_icon(ui: &egui::Ui, tex: &TextureHandle, center: egui::Pos2, size: f32) {
+    ui.painter().image(
+        tex.id(),
+        egui::Rect::from_center_size(center, Vec2::splat(size)),
+        egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+        Color32::WHITE,
+    );
+}
+
+/// Ribbon 通用图标按钮（自绘背景 + 居中图标）。
+fn icon_button(
+    ui: &mut egui::Ui,
+    key: &str,
+    size: Vec2,
+    tex: &TextureHandle,
+    icon_size: f32,
+    active: bool,
+    tip: String,
+) -> egui::Response {
+    ui.push_id(key, |ui| {
+        let (rect, r) = ui.allocate_exact_size(size, Sense::click());
+        let fill = tool_bg(&r, active);
+        if fill != Color32::TRANSPARENT {
+            ui.painter().rect_filled(rect, 3.0, fill);
+        }
+        paint_icon(ui, tex, rect.center(), icon_size);
+        r.on_hover_text(tip)
+    })
+    .inner
+}
+
+/// ▾ 三角箭头按钮（自绘三角形，不依赖字体字形）。
+/// 菜单本体由调用方用 `egui::Popup::menu(&r).show(...)` 挂载（锚定按钮下方）。
+fn caret_btn(ui: &mut egui::Ui, key: &str, size: Vec2, active: bool) -> egui::Response {
+    ui.push_id(key, |ui| {
+        let (rect, r) = ui.allocate_exact_size(size, Sense::click());
+        let fill = tool_bg(&r, active);
+        if fill != Color32::TRANSPARENT {
+            ui.painter().rect_filled(rect, 3.0, fill);
+        }
+        let (w, h) = (7.0, 4.5);
+        let cx = rect.center().x;
+        let cy = rect.center().y;
+        ui.painter().add(egui::Shape::convex_polygon(
+            vec![
+                egui::pos2(cx - w / 2.0, cy - h / 2.0),
+                egui::pos2(cx + w / 2.0, cy - h / 2.0),
+                egui::pos2(cx, cy + h / 2.0),
+            ],
+            Color32::WHITE,
+            egui::Stroke::NONE,
+        ));
+        r
+    })
+    .inner
+}
+
 fn quick_button(
     ui: &mut egui::Ui,
     icons: &mut HashMap<String, TextureHandle>,
-    _id: &str,
     icon: &'static str,
     tip: &'static str,
     cmd: &'static str,
     model: &mut CadModel,
 ) {
     let tex = icon_tex(ui.ctx(), icons, icon);
-    let r = ui
-        .add(
-            egui::Button::image(img(&tex, 17.0))
-                .fill(Color32::TRANSPARENT)
-                .min_size(Vec2::splat(26.0)),
-        )
-        .on_hover_text(tip_text(tip, cmd));
+    let r = icon_button(
+        ui,
+        &format!("qa-{cmd}"),
+        Vec2::splat(26.0),
+        &tex,
+        17.0,
+        false,
+        tip_text(tip, cmd),
+    );
     if r.clicked() {
         model.run_command(cmd);
     }
 }
 
+/// Undo/Redo：面执行一步，箭头列出历史标签（点第 k 项一次回退/重做 k 步）。
 fn history_button(
     ui: &mut egui::Ui,
     icons: &mut HashMap<String, TextureHandle>,
@@ -488,13 +558,15 @@ fn history_button(
     model: &mut CadModel,
 ) {
     let tex = icon_tex(ui.ctx(), icons, icon);
-    let face = ui
-        .add(
-            egui::Button::image(img(&tex, 17.0))
-                .fill(Color32::TRANSPARENT)
-                .min_size(Vec2::splat(26.0)),
-        )
-        .on_hover_text(tip_text(tip, if is_undo { "U" } else { "REDO" }));
+    let face = icon_button(
+        ui,
+        &format!("{id}-f"),
+        Vec2::splat(26.0),
+        &tex,
+        17.0,
+        false,
+        tip_text(tip, if is_undo { "U" } else { "REDO" }),
+    );
     if face.clicked() {
         if is_undo {
             model.undo();
@@ -502,27 +574,26 @@ fn history_button(
             model.redo();
         }
     }
-    // 历史箭头（栈空时隐藏）
     if !labels.is_empty() {
         let owned: Vec<String> = labels.to_vec();
-        ui.push_id(id, |ui| {
-            ui.menu_button(egui::RichText::new("▾").size(8.0), |ui| {
-                for (i, label) in owned.iter().enumerate() {
-                    let n = i + 1;
-                    if ui.button(label.clone()).clicked() {
-                        if is_undo {
-                            model.undo_many(n);
-                        } else {
-                            model.redo_many(n);
-                        }
-                        ui.close();
+        let caret = caret_btn(ui, &format!("{id}-c"), Vec2::new(10.0, 26.0), false);
+        egui::Popup::menu(&caret).show(|ui| {
+            for (i, label) in owned.iter().enumerate() {
+                let n = i + 1;
+                if ui.button(label.clone()).clicked() {
+                    if is_undo {
+                        model.undo_many(n);
+                    } else {
+                        model.redo_many(n);
                     }
+                    ui.close();
                 }
-            });
+            }
         });
     }
 }
 
+/// 大按钮：整块 60×68，图标居中于上部、标签贴底，单一命中区。
 fn large_tool(
     ui: &mut egui::Ui,
     model: &mut CadModel,
@@ -536,22 +607,25 @@ fn large_tool(
     let tex = icon_tex(ui.ctx(), icons, icon);
     let active = snap.is_active(cmd);
     ui.push_id(key, |ui| {
-        ui.vertical(|ui| {
-            ui.set_width(LARGE_W);
-            let r = ui
-                .add(
-                    egui::Button::image(img(&tex, 30.0))
-                        .min_size(Vec2::new(LARGE_W, 36.0))
-                        .fill(tool_fill(active)),
-                )
-                .on_hover_text(tip_text(label, cmd));
-            if r.clicked() {
-                model.run_tool(cmd);
-            }
-            ui.with_layout(egui::Layout::top_down_justified(egui::Align::Center), |ui| {
-                ui.label(egui::RichText::new(label).size(10.5).color(c(0xe8e8e8)));
-            });
-        });
+        let (rect, r) = ui.allocate_exact_size(Vec2::new(LARGE_W, LARGE_H), Sense::click());
+        let fill = tool_bg(&r, active);
+        if fill != Color32::TRANSPARENT {
+            ui.painter().rect_filled(rect, 3.0, fill);
+        }
+        paint_icon(ui, &tex, egui::pos2(rect.center().x, rect.top() + 24.0), 30.0);
+        ui.painter().text(
+            egui::pos2(rect.center().x, rect.bottom() - 7.0),
+            egui::Align2::CENTER_CENTER,
+            label,
+            egui::FontId::proportional(10.5),
+            c(0xe8e8e8),
+        );
+        if r.hovered() {
+            r.clone().on_hover_text(tip_text(label, cmd));
+        }
+        if r.clicked() {
+            model.run_tool(cmd);
+        }
     });
 }
 
@@ -582,6 +656,7 @@ fn menu_items_ui(
     }
 }
 
+/// 分裂按钮的当前面：current_cmd / last_cmd 优先，其次默认。
 fn current_face(
     dd: &str,
     icon: &'static str,
@@ -600,6 +675,8 @@ fn current_face(
     }
 }
 
+/// 大分裂按钮：整块 60×68，face 区（图标+标签）与底部 caret 条各自命中。
+/// 菜单经 Popup::menu 锚定在按钮下方（对应 gpui 版整宽箭头条 + dd_anchor）。
 fn split_large(
     ui: &mut egui::Ui,
     model: &mut CadModel,
@@ -614,32 +691,60 @@ fn split_large(
 ) {
     let (face_icon, face_label, face_cmd) = current_face(dd, icon, label, cmd, menu, snap);
     let active = snap.is_active(dd) || menu.iter().any(|(c, _, _)| snap.is_active(c));
+    let face_tex = icon_tex(ui.ctx(), icons, face_icon);
 
     ui.push_id(key, |ui| {
-        ui.vertical(|ui| {
-            ui.set_width(LARGE_W);
-            let tex = icon_tex(ui.ctx(), icons, face_icon);
-            let face = ui
-                .add(
-                    egui::Button::image(img(&tex, 30.0))
-                        .min_size(Vec2::new(LARGE_W, 36.0))
-                        .fill(tool_fill(active)),
-                )
-                .on_hover_text(tip_text(face_label, face_cmd));
-            if face.clicked() {
-                model.run_tool(face_cmd);
-            }
-            ui.with_layout(egui::Layout::top_down_justified(egui::Align::Center), |ui| {
-                ui.label(egui::RichText::new(face_label).size(10.5).color(c(0xe8e8e8)));
-            });
-            // 居中箭头 → 菜单（锚定按钮下方）
-            ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-                ui.push_id(format!("{key}-caret"), |ui| {
-                    ui.menu_button(egui::RichText::new("▾").size(9.0), |ui| {
-                        menu_items_ui(ui, model, icons, menu, dd, snap);
-                    });
-                });
-            });
+        ui.spacing_mut().item_spacing.y = 0.0;
+        let (rect, _) = ui.allocate_exact_size(Vec2::new(LARGE_W, LARGE_H), Sense::hover());
+        let face_rect = egui::Rect::from_min_size(rect.min, Vec2::new(LARGE_W, LARGE_H - 12.0));
+        let caret_rect = egui::Rect::from_min_size(
+            egui::pos2(rect.min.x, rect.min.y + LARGE_H - 12.0),
+            Vec2::new(LARGE_W, 12.0),
+        );
+        let face = ui.interact(face_rect, egui::Id::new((key, 'f')), Sense::click());
+        let caret = ui.interact(caret_rect, egui::Id::new((key, 'c')), Sense::click());
+
+        let down = face.is_pointer_button_down_on() || caret.is_pointer_button_down_on();
+        let hovered = face.hovered() || caret.hovered();
+        let fill = if down {
+            Color32::from_rgba_unmultiplied(6, 150, 215, 128)
+        } else if active {
+            accent_active()
+        } else if hovered {
+            Color32::from_rgba_unmultiplied(6, 150, 215, 38)
+        } else {
+            Color32::TRANSPARENT
+        };
+        if fill != Color32::TRANSPARENT {
+            ui.painter().rect_filled(rect, 3.0, fill);
+        }
+        paint_icon(ui, &face_tex, egui::pos2(rect.center().x, rect.top() + 22.0), 30.0);
+        ui.painter().text(
+            egui::pos2(rect.center().x, rect.min.y + LARGE_H - 18.0),
+            egui::Align2::CENTER_CENTER,
+            face_label,
+            egui::FontId::proportional(10.5),
+            c(0xe8e8e8),
+        );
+        let cx = rect.center().x;
+        let cy = caret_rect.center().y;
+        ui.painter().add(egui::Shape::convex_polygon(
+            vec![
+                egui::pos2(cx - 3.5, cy - 2.2),
+                egui::pos2(cx + 3.5, cy - 2.2),
+                egui::pos2(cx, cy + 2.2),
+            ],
+            Color32::WHITE,
+            egui::Stroke::NONE,
+        ));
+        if face.hovered() {
+            face.clone().on_hover_text(tip_text(face_label, face_cmd));
+        }
+        if face.clicked() {
+            model.run_tool(face_cmd);
+        }
+        egui::Popup::menu(&caret).show(|ui| {
+            menu_items_ui(ui, model, icons, menu, dd, snap);
         });
     });
 }
@@ -655,21 +760,21 @@ fn small_tool(
     snap: &RibbonSnapshot,
 ) {
     let tex = icon_tex(ui.ctx(), icons, icon);
-    let active = snap.is_active(cmd);
-    ui.push_id(key, |ui| {
-        let r = ui
-            .add(
-                egui::Button::image(img(&tex, 16.0))
-                    .min_size(Vec2::splat(23.0))
-                    .fill(tool_fill(active)),
-            )
-            .on_hover_text(tip_text(tip, cmd));
-        if r.clicked() {
-            model.run_tool(cmd);
-        }
-    });
+    let r = icon_button(
+        ui,
+        key,
+        Vec2::splat(23.0),
+        &tex,
+        16.0,
+        snap.is_active(cmd),
+        tip_text(tip, cmd),
+    );
+    if r.clicked() {
+        model.run_tool(cmd);
+    }
 }
 
+/// 小分裂按钮：整块 24×23，face 15px + caret 8px。
 fn split_small(
     ui: &mut egui::Ui,
     model: &mut CadModel,
@@ -689,33 +794,59 @@ fn split_small(
         None => (t.icon, t.cmd),
     };
     let active = snap.is_active(dd) || t.menu.iter().any(|(c, _, _)| snap.is_active(c));
+    let face_tex = icon_tex(ui.ctx(), icons, face_icon);
 
     ui.push_id(key, |ui| {
-        ui.vertical(|ui| {
-            let tex = icon_tex(ui.ctx(), icons, face_icon);
-            let face = ui
-                .add(
-                    egui::Button::image(img(&tex, 14.0))
-                        .min_size(Vec2::new(24.0, 15.0))
-                        .fill(tool_fill(active)),
-                )
-                .on_hover_text(tip_text(t.tip, face_cmd));
-            if face.clicked() {
-                model.run_tool(face_cmd);
-            }
-            if !t.menu.is_empty() {
-                ui.push_id(format!("{key}-m"), |ui| {
-                    ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-                        ui.menu_button(egui::RichText::new("▾").size(7.0), |ui| {
-                            menu_items_ui(ui, model, icons, t.menu, dd, snap);
-                        });
-                    });
-                });
-            }
-        });
+        ui.spacing_mut().item_spacing.y = 0.0;
+        let (rect, _) = ui.allocate_exact_size(Vec2::new(24.0, 23.0), Sense::hover());
+        let face_rect = egui::Rect::from_min_size(rect.min, Vec2::new(24.0, 15.0));
+        let caret_rect = egui::Rect::from_min_size(
+            egui::pos2(rect.min.x, rect.min.y + 15.0),
+            Vec2::new(24.0, 8.0),
+        );
+        let face = ui.interact(face_rect, egui::Id::new((key, 'f')), Sense::click());
+        let caret = ui.interact(caret_rect, egui::Id::new((key, 'c')), Sense::click());
+        let down = face.is_pointer_button_down_on() || caret.is_pointer_button_down_on();
+        let hovered = face.hovered() || caret.hovered();
+        let fill = if down {
+            Color32::from_rgba_unmultiplied(6, 150, 215, 128)
+        } else if active {
+            accent_active()
+        } else if hovered {
+            Color32::from_rgba_unmultiplied(6, 150, 215, 38)
+        } else {
+            Color32::TRANSPARENT
+        };
+        if fill != Color32::TRANSPARENT {
+            ui.painter().rect_filled(rect, 3.0, fill);
+        }
+        paint_icon(ui, &face_tex, face_rect.center(), 14.0);
+        let cx = rect.center().x;
+        let cy = caret_rect.center().y;
+        ui.painter().add(egui::Shape::convex_polygon(
+            vec![
+                egui::pos2(cx - 3.0, cy - 1.8),
+                egui::pos2(cx + 3.0, cy - 1.8),
+                egui::pos2(cx, cy + 1.8),
+            ],
+            Color32::WHITE,
+            egui::Stroke::NONE,
+        ));
+        if face.hovered() {
+            face.clone().on_hover_text(tip_text(t.tip, face_cmd));
+        }
+        if face.clicked() {
+            model.run_tool(face_cmd);
+        }
+        if !t.menu.is_empty() {
+            egui::Popup::menu(&caret).show(|ui| {
+                menu_items_ui(ui, model, icons, t.menu, dd, snap);
+            });
+        }
     });
 }
 
+/// 横向按钮：左图标 + 右文字 + 小箭头。
 fn labeled_split(
     ui: &mut egui::Ui,
     model: &mut CadModel,
@@ -730,6 +861,7 @@ fn labeled_split(
     let dd = cmd;
     let (face_icon, face_label, face_cmd) = current_face(dd, icon, label, cmd, menu, snap);
     let active = snap.is_active(dd) || menu.iter().any(|(c, _, _)| snap.is_active(c));
+    let face_tex = icon_tex(ui.ctx(), icons, face_icon);
 
     ui.push_id(key, |ui| {
         egui::Frame::new()
@@ -743,34 +875,55 @@ fn labeled_split(
             .inner_margin(egui::Margin::symmetric(4, 2))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    let tex = icon_tex(ui.ctx(), icons, face_icon);
-                    let icon_btn = ui
-                        .add(egui::Button::image(img(&tex, 14.0)).fill(Color32::TRANSPARENT))
-                        .on_hover_text(tip_text(face_label, face_cmd));
-                    if icon_btn.clicked() {
+                    let icon_r = icon_button(
+                        ui,
+                        &format!("{key}-i"),
+                        Vec2::splat(18.0),
+                        &face_tex,
+                        14.0,
+                        false,
+                        tip_text(face_label, face_cmd),
+                    );
+                    if icon_r.clicked() {
                         model.run_tool(face_cmd);
                     }
-                    let label_btn = ui
-                        .add(
-                            egui::Button::new(
-                                egui::RichText::new(face_label).size(11.0).color(c(0xe8e8e8)),
-                            )
-                            .fill(Color32::TRANSPARENT),
-                        )
-                        .on_hover_text(tip_text(face_label, face_cmd));
-                    if label_btn.clicked() {
+                    let (label_rect, label_r) =
+                        ui.allocate_exact_size(Vec2::new(52.0, 18.0), Sense::click());
+                    ui.painter().text(
+                        label_rect.left_center() + Vec2::new(2.0, 0.0),
+                        egui::Align2::LEFT_CENTER,
+                        face_label,
+                        egui::FontId::proportional(11.0),
+                        c(0xe8e8e8),
+                    );
+                    if label_r.hovered() {
+                        label_r.clone().on_hover_text(tip_text(face_label, face_cmd));
+                    }
+                    if label_r.clicked() {
                         model.run_tool(face_cmd);
                     }
-                    if !menu.is_empty() {
-                        ui.push_id(format!("{key}-m"), |ui| {
-                            ui.menu_button(egui::RichText::new("▾").size(8.0), |ui| {
-                                menu_items_ui(ui, model, icons, menu, dd, snap);
-                            });
-                        });
-                    }
+                    let caret = caret_btn(ui, &format!("{key}-c"), Vec2::new(14.0, 20.0), false);
+                    egui::Popup::menu(&caret).show(|ui| {
+                        menu_items_ui(ui, model, icons, menu, dd, snap);
+                    });
                 });
             });
     });
+}
+
+fn mini_tool(
+    ui: &mut egui::Ui,
+    model: &mut CadModel,
+    icons: &mut HashMap<String, TextureHandle>,
+    key: &str,
+    icon: &'static str,
+    cmd: &'static str,
+) {
+    let tex = icon_tex(ui.ctx(), icons, icon);
+    let r = icon_button(ui, key, Vec2::splat(24.0), &tex, 16.0, false, cmd.to_string());
+    if r.clicked() {
+        model.run_tool(cmd);
+    }
 }
 
 fn layer_combo(
@@ -963,7 +1116,7 @@ fn ext_panel_ui(
                         .add_sized(
                             [26.0, 26.0],
                             egui::Button::image(img(&tex, 16.0))
-                                .fill(tool_fill(snap.is_active(t.cmd))),
+                                .fill(if snap.is_active(t.cmd) { accent_active() } else { Color32::TRANSPARENT }),
                         )
                         .on_hover_text(tip_text(t.label, t.cmd));
                     if r.clicked() {
@@ -1137,20 +1290,7 @@ fn render_compact(
     };
     ui.vertical(|ui| {
         for (k, (icon, cmd)) in icons_of(item).into_iter().enumerate() {
-            let tex = icon_tex(ui.ctx(), icons, icon);
-            let r = ui
-                .push_id(format!("{key}s{k}"), |ui| {
-                    ui.add(
-                        egui::Button::image(img(&tex, 16.0))
-                            .min_size(Vec2::splat(24.0))
-                            .fill(Color32::TRANSPARENT),
-                    )
-                    .on_hover_text(cmd)
-                })
-                .inner;
-            if r.clicked() {
-                model.run_tool(cmd);
-            }
+            mini_tool(ui, model, icons, &format!("{key}s{k}"), icon, cmd);
         }
     });
 }
