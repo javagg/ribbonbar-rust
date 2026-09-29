@@ -56,6 +56,52 @@ pub enum RibbonItem {
     },
     /// 图层下拉组合框（搜索 + 行内开关 + 活动层）。
     LayerCombo,
+    /// Office 剪贴板形态：大按钮 + 右侧竖排横排小按钮（图标+文字，可带▾）。
+    PasteGroup {
+        icon: &'static str,
+        label: &'static str,
+        cmd: &'static str,
+        sides: &'static [(&'static str, &'static str, &'static str, bool)],
+    },
+    /// Office 组合框行：标签/值 + ▾ 一体（如 字体/字号）。
+    ComboRow { items: &'static [Combo] },
+    /// Office 流式小按钮行：纯字符自绘按钮（B/I/U/abc…）。
+    CharFlow { buttons: &'static [CharBtn] },
+    /// Office 数值微调组：标签 + 值 + ▴▾。
+    SpinRow { items: &'static [SpinEdit] },
+    /// 横排带文字按钮（右箭头下拉），可禁用。
+    ActionRow { items: &'static [ActionBtn] },
+}
+
+/// Office 组合框：一体式（值 + ▾）。
+pub struct Combo {
+    pub label: &'static str,
+    pub value: &'static str,
+    pub width: f32,
+    pub options: &'static [&'static str],
+    pub cmd: &'static str,
+}
+
+/// Office 流式字符按钮：(字符, 命令, 是否切换型)。
+pub struct CharBtn {
+    pub ch: &'static str,
+    pub cmd: &'static str,
+    pub toggle: bool,
+}
+
+/// Office 横排带文字按钮：(文字, 命令, 是否禁用)。
+pub struct ActionBtn {
+    pub label: &'static str,
+    pub cmd: &'static str,
+    pub disabled: bool,
+}
+
+/// Office 数值微调框：(标签, 值, 宽度)。
+pub struct SpinEdit {
+    pub label: &'static str,
+    pub value: &'static str,
+    pub width: f32,
+    pub cmd: &'static str,
 }
 
 pub struct RibbonGroup {
@@ -99,6 +145,53 @@ pub fn tabs() -> &'static Vec<RibbonTab> {
             RibbonTab {
                 name: "绘图",
                 groups: vec![
+                    RibbonGroup {
+                        name: "剪贴板",
+                        ext: None,
+                        items: vec![
+                            RibbonItem::PasteGroup {
+                                icon: "paste.svg",
+                                label: "粘贴",
+                                cmd: "paste",
+                                sides: &[
+                                    ("modify_cut.svg", "剪切", "cut", true),
+                                    ("copy_clip.svg", "复制", "copy", false),
+                                ],
+                            },
+                        ],
+                    },
+                    RibbonGroup {
+                        name: "文字",
+                        ext: None,
+                        items: vec![
+                            RibbonItem::ComboRow {
+                                items: &[
+                                    Combo { label: "字体", value: "SimSun", width: 96.0, options: &["SimSun", "Arial", "Courier New"], cmd: "textfont" },
+                                    Combo { label: "字号", value: "2.5", width: 44.0, options: &["2.5", "3.5", "5.0"], cmd: "textheight" },
+                                ],
+                            },
+                            RibbonItem::CharFlow {
+                                buttons: &[
+                                    CharBtn { ch: "B", cmd: "bold", toggle: true },
+                                    CharBtn { ch: "I", cmd: "italic", toggle: true },
+                                    CharBtn { ch: "U", cmd: "underline", toggle: true },
+                                    CharBtn { ch: "abc", cmd: "strikethru", toggle: false },
+                                ],
+                            },
+                        ],
+                    },
+                    RibbonGroup {
+                        name: "栅格",
+                        ext: None,
+                        items: vec![
+                            RibbonItem::SpinRow {
+                                items: &[
+                                    SpinEdit { label: "X 间距", value: "10", width: 46.0, cmd: "gridx" },
+                                    SpinEdit { label: "Y 间距", value: "10", width: 46.0, cmd: "gridy" },
+                                ],
+                            },
+                        ],
+                    },
                     RibbonGroup {
                         name: "绘图",
                         ext: Some(DRAW_EXT),
@@ -264,6 +357,13 @@ pub fn tabs() -> &'static Vec<RibbonTab> {
                                 menu: &[
                                     ("dim_style.svg", "ISO-25", "dimstyle_iso25"),
                                     ("dim_style.svg", "GB-35", "dimstyle_gb35"),
+                                ],
+                            },
+                            RibbonItem::ActionRow {
+                                items: &[
+                                    ActionBtn { label: "快速选择", cmd: "qselect", disabled: false },
+                                    ActionBtn { label: "查找文字", cmd: "find", disabled: false },
+                                    ActionBtn { label: "替换", cmd: "replace", disabled: true },
                                 ],
                             },
                         ],
@@ -525,6 +625,12 @@ pub fn item_width_full(item: &RibbonItem) -> f32 {
         RibbonItem::Column { .. } | RibbonItem::SplitColumn { .. } => MINI_W,
         RibbonItem::LayerCombo => 110.0,
         RibbonItem::LabeledSplit { .. } => 104.0,
+        // Office 形态
+        RibbonItem::PasteGroup { .. } => 96.0,
+        RibbonItem::ComboRow { .. } => 170.0,
+        RibbonItem::CharFlow { .. } => 92.0,
+        RibbonItem::SpinRow { .. } => 150.0,
+        RibbonItem::ActionRow { .. } => 130.0,
     }
 }
 

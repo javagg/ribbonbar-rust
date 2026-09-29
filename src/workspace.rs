@@ -1,23 +1,26 @@
-//! 主窗口装配：RibbonBar + DockArea + 自绘状态栏。
-//! 状态栏模仿 CAD：左侧实时坐标，右侧对象捕捉开关（OSNAP/ORTHO/POLAR/LWT）。
+//! 主窗口装配：Office 风格 RibbonBar + DockArea + Office 状态栏。
+//! 状态栏：左侧命令状态/坐标，右侧 捕捉开关 + 视图切换 + 缩放滑块 + 主题切换。
 
 use gpui_kit::component::dock::DockArea;
-use gpui_kit::component::theme::Theme;
-use gpui_kit::component::{ActiveTheme, StyledExt};
-use gpui_kit::{InteractiveElement as _, StatefulInteractiveElement as _};
+use gpui_kit::component::StyledExt;
+use gpui_kit::component::slider::{Slider, SliderState};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::{
-    div, img, px, rgba, AppContext as _, Context, ElementId, Entity, IntoElement, ParentElement,
-    Render, SharedString, Stateful, Styled, Subscription, Window,
+    div, img, px, rgb, AppContext as _, Context, ElementId, Entity, IntoElement,
+    InteractiveElement as _, ParentElement, Render, SharedString, Stateful,
+    StatefulInteractiveElement as _, Styled, Subscription, Window,
 };
 
 use crate::icons;
+use crate::office_widgets::office_theme;
 use crate::ribbon::RibbonBar;
 use crate::state::{self, AppEvent};
+use crate::theme::OfficePreset;
 
 pub struct Workspace {
     ribbon: Entity<RibbonBar>,
     dock_area: Entity<DockArea>,
+    zoom: Entity<SliderState>,
     _sub: Option<Subscription>,
 }
 
@@ -51,15 +54,19 @@ impl Workspace {
             })
         });
 
+        let zoom = cx.new(|_| SliderState::new());
+
         Self {
             ribbon: cx.new(|cx| RibbonBar::new(window, cx)),
             dock_area,
+            zoom,
             _sub: sub,
         }
     }
 
+    /// Office 风格状态栏：状态文字 | 坐标 | 捕捉开关 | 视图 | 缩放 | 主题切换。
     fn render_status_bar(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme().clone();
+        let ot = office_theme(cx);
         let Some(app) = state::app_state(cx) else {
             return div().h(px(26.0));
         };
@@ -69,12 +76,18 @@ impl Workspace {
             .cursor
             .map(|(x, y)| format!("X {:>10.4}   Y {:>10.4}", x, y))
             .unwrap_or_else(|| "X           -           Y           -".to_string());
+        let last_cmd = s
+            .undo_stack
+            .last()
+            .cloned()
+            .unwrap_or_else(|| "就绪".to_string());
         let toggles: [(&'static str, &'static str, &'static str, bool); 4] = [
             ("OSNAP", "status/osnap.svg", "osnap", s.osnap),
             ("ORTHO", "status/ortho.svg", "ortho", s.ortho),
             ("POLAR", "status/polar.svg", "polar", s.polar),
             ("LWT", "status/lwt.svg", "lwt", s.lwt),
         ];
+        let zoom = self.zoom.clone();
 
         div()
             .h_flex()
@@ -82,27 +95,112 @@ impl Workspace {
             .h(px(26.0))
             .flex_shrink_0()
             .items_center()
+            .bg(ot.status_bg)
             .border_t_1()
-            .border_color(theme.border)
-            .bg(theme.status_bar)
+            .border_color(ot.group_line)
             .px_2()
+            .gap_2()
+            // 左：最近命令 + 实时坐标
+            .child(
+                div()
+                    .text_size(px(11.0))
+                    .text_color(ot.status_text)
+                    .child(SharedString::from(format!("命令: {last_cmd}"))),
+            )
             .child(
                 div()
                     .font_family("Consolas")
                     .text_size(px(11.0))
-                    .text_color(theme.accent)
+                    .text_color(ot.accent)
                     .child(SharedString::from(coords)),
             )
             .child(div().flex_1())
+            // 右：捕捉开关
             .children(toggles.map(|(label, icon, kind, on)| {
-                status_toggle(label, icon, kind, on, &theme)
+                status_toggle(label, icon, kind, on, &ot)
             }))
+            .child(
+                div()
+                    .w(px(1.0))
+                    .h(px(14.0))
+                    .mx_1()
+                    .bg(ot.group_line)
+                    .flex_shrink_0(),
+            )
+            // 视图切换（演示按钮组）
+            .child(
+                div()
+                    .h_flex()
+                    .gap_0p5()
+                    .child(
+                        div()
+                            .px_1p5()
+                            .h(px(18.0))
+                            .flex().items_center()
+                            .rounded_xs()
+                            .bg(rgb(0xffffff))
+                            .text_size(px(10.0))
+                            .text_color(ot.text)
+                            .child("视图"),
+                    )
+                    .child(
+                        div()
+                            .px_1p5()
+                            .h(px(18.0))
+                            .flex().items_center()
+                            .rounded_xs()
+                            .text_size(px(10.0))
+                            .text_color(ot.status_text)
+                            .child("布局"),
+                    ),
+            )
+            // 缩放滑块 + 百分比
+            .child(
+                div().h_flex().items_center().gap_1().w(px(150.0)).child(
+                    div().flex_1().child(Slider::new(&zoom)),
+                ),
+            )
+            .child(
+                div()
+                    .text_size(px(10.0))
+                    .text_color(ot.status_text)
+                    .child("100%"),
+            )
+            // 主题切换（蓝 / 绿）
+            .child(
+                div()
+                    .id("theme-blue")
+                    .size(px(18.0))
+                    .rounded_xs()
+                    .border_1()
+                    .border_color(ot.group_line)
+                    .bg(rgb(0x4a6fbf))
+                    .cursor_pointer()
+                    .hover(move |s| s.opacity(0.8))
+                    .on_click(|_, _, cx| {
+                        crate::office_widgets::set_office_theme(OfficePreset::Blue, cx)
+                    }),
+            )
+            .child(
+                div()
+                    .id("theme-green")
+                    .size(px(18.0))
+                    .rounded_xs()
+                    .border_1()
+                    .border_color(ot.group_line)
+                    .bg(rgb(0x7cb84e))
+                    .cursor_pointer()
+                    .hover(move |s| s.opacity(0.8))
+                    .on_click(|_, _, cx| {
+                        crate::office_widgets::set_office_theme(OfficePreset::Green, cx)
+                    }),
+            )
     }
 }
 
 impl Render for Workspace {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme().clone();
+        let ot = office_theme(cx);
         let ribbon = self.ribbon.clone();
         let ribbon_el = ribbon.update(cx, |r, cx| r.render(window, cx).into_any_element());
 
@@ -110,8 +208,8 @@ impl Render for Workspace {
             .flex()
             .flex_col()
             .size_full()
-            .bg(theme.background)
-            .text_color(theme.foreground)
+            .bg(ot.tool_bg)
+            .text_color(ot.text)
             .child(ribbon_el)
             .child(div().flex_1().min_h_0().child(self.dock_area.clone()))
             .child(self.render_status_bar(cx))
@@ -123,7 +221,7 @@ fn status_toggle(
     icon: &'static str,
     kind: &'static str,
     on: bool,
-    theme: &Theme,
+    ot: &crate::theme::OfficeTheme,
 ) -> Stateful<gpui_kit::Div> {
     div()
         .id(ElementId::Name(format!("sb-{kind}").into()))
@@ -133,14 +231,12 @@ fn status_toggle(
         .ml_1()
         .gap_1()
         .items_center()
-        .rounded_sm()
+        .rounded_xs()
         .cursor_pointer()
         .when(on, |el| {
-            el.bg(rgba(0x0696d72e))
-                .border_1()
-                .border_color(rgba(0x0696d760))
+            el.bg(ot.stuck).border_1().border_color(ot.hover_border)
         })
-        .when(!on, |el| el.hover(|s| s.bg(rgba(0xffffff0d))))
+        .when(!on, |el| el.hover(|s| s.bg(ot.hover)))
         .on_click(move |_, _, cx| state::toggle(kind, cx))
         .child(
             div()
@@ -150,11 +246,7 @@ fn status_toggle(
         .child(
             div()
                 .text_size(px(9.5))
-                .text_color(if on {
-                    theme.foreground
-                } else {
-                    theme.muted_foreground
-                })
+                .text_color(if on { ot.text } else { ot.disabled })
                 .child(label),
         )
 }

@@ -27,7 +27,9 @@ use gpui_kit::{
 };
 
 use crate::icons;
+use crate::office_widgets::office_theme;
 use crate::state::{self, LayerInfo, RibbonSnapshot};
+use crate::theme::OfficeTheme;
 
 pub use cad_demo::ribbon_data::*;
 
@@ -41,6 +43,7 @@ const CONTENT_H: f32 = 92.0;
 pub struct RibbonBar {
     pub active: usize,
     pub collapsed: bool,
+    pub preset: crate::theme::OfficePreset,
     row_width: f32,
     /// 图层下拉的搜索框（复用实体，内容闭包里读它的 value 做过滤）。
     layer_filter: Entity<InputState>,
@@ -56,10 +59,11 @@ impl RibbonBar {
         .detach();
         // 首帧即用视口宽度决定降级档位（prepaint 阶段的 notify 不可靠）
         let viewport_w = window.viewport_size().width.as_f32();
-        Self { active: 0, collapsed: false, row_width: viewport_w, layer_filter }
+        Self { active: 0, collapsed: false, preset: crate::theme::OfficePreset::Blue, row_width: viewport_w, layer_filter }
     }
 
     pub fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let ot = office_theme(cx);
         let theme = cx.theme().clone();
         let this = cx.entity();
         let snap = state::ribbon_snapshot(cx);
@@ -78,7 +82,7 @@ impl RibbonBar {
 
             let mut groups = Vec::with_capacity(tab.groups.len());
             for ((gi, group), level) in tab.groups.iter().enumerate().zip(levels) {
-                groups.push(self.render_group(self.active, gi, group, level, &snap, &self.layer_filter, &theme));
+                groups.push(self.render_group(self.active, gi, group, level, &snap, &self.layer_filter, &ot, &theme));
             }
 
             div()
@@ -106,9 +110,9 @@ impl RibbonBar {
 
         div()
             .flex().flex_col().w_full().flex_shrink_0()
-            .bg(theme.background)
+            .bg(ot.tool_bg)
             .border_b_1()
-            .border_color(theme.border)
+            .border_color(ot.group_line)
             .child(strip)
             .children(content)
     }
@@ -119,12 +123,18 @@ impl RibbonBar {
         cx: &mut Context<Self>,
         snap: &RibbonSnapshot,
     ) -> Stateful<gpui_kit::Div> {
-        let theme = cx.theme().clone();
+        let ot = office_theme(cx);
         let tabs = tabs();
 
-        let mut strip = div().id("ribbon-tabs").h_flex().w_full().h(px(TAB_STRIP_H)).px_2();
+        let mut strip = div()
+            .id("ribbon-tabs")
+            .h_flex()
+            .w_full()
+            .h(px(TAB_STRIP_H))
+            .bg(ot.tab_bar_bg)
+            .px_2();
 
-        // 快速访问：新建/打开/保存/打印 + Undo/Redo 历史下拉
+        // 快速访问：新建/打开/保存/打印 + Undo/Redo 历史下拉（Office 位置在标签行内）
         strip = strip.children([
             quick_button("qa-new", "ui/doc_new.svg", "新建", "new"),
             quick_button("qa-open", "ui/folder_open.svg", "打开", "open"),
@@ -137,31 +147,51 @@ impl RibbonBar {
             div()
                 .h(px(18.0))
                 .w(px(1.0))
-                .bg(theme.border)
-                .mx_2()
+                .bg(ot.group_line)
+                .mx_1()
                 .flex_shrink_0(),
         );
 
-        // 标签页
+        // File：左端独立块（应用菜单入口）
+        strip = strip.child(
+            div()
+                .id("ribbon-file")
+                .h(px(TAB_STRIP_H - 4.0))
+                .px_3()
+                .flex()
+                .items_center()
+                .rounded_t_sm()
+                .bg(ot.file_bg)
+                .text_color(ot.tab_text)
+                .text_size(px(12.5))
+                .cursor_pointer()
+                .hover(|s| s.bg(ot.title_bg))
+                .child("文件")
+                .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
+                    this.active = 0;
+                    cx.notify();
+                })),
+        );
+
+        // 标签页：激活 = 白底黑字（点亮工具区）
         strip = strip.children(tabs.iter().enumerate().map(|(ix, tab)| {
             let active = ix == self.active;
             let name = tab.name;
             div()
                 .id(ElementId::Name(format!("tab-{ix}").into()))
-                .h_flex()
-                .h_full()
+                .h(px(TAB_STRIP_H - 4.0))
                 .px_3()
+                .flex()
+                .items_center()
                 .rounded_t_sm()
                 .text_size(px(12.5))
                 .cursor_pointer()
                 .when(active, |el| {
-                    el.border_b_2()
-                        .border_color(theme.accent)
-                        .text_color(theme.foreground)
+                    el.bg(ot.tab_active_bg).text_color(ot.tab_active_text)
                 })
                 .when(!active, |el| {
-                    el.text_color(theme.muted_foreground)
-                        .hover(|s| s.text_color(theme.foreground).bg(rgba(0xffffff0a)))
+                    el.text_color(ot.tab_text)
+                        .hover(move |s| s.bg(ot.title_bg))
                 })
                 .child(name)
                 .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
@@ -170,20 +200,44 @@ impl RibbonBar {
                 }))
         }));
 
-        // 右侧：折叠功能区
-        strip = strip.child(div().flex_1());
+        // 上下文标签：第二主题色、位置更高（demo 常显；真实应用随对象选择出现）
         strip = strip.child(
             div()
-                .id("ribbon-collapse")
-                .h_flex()
-                .size(px(26.0))
-                .rounded_sm()
+                .id("tab-contextual")
+                .mt(px(-6.0))
+                .h(px(TAB_STRIP_H))
+                .px_3()
+                .flex()
+                .flex_col()
+                .items_center()
                 .justify_center()
-                .text_color(theme.muted_foreground)
-                .hover(|s| s.bg(rgba(0xffffff14)).text_color(theme.foreground))
+                .rounded_t_sm()
+                .bg(ot.ctx_bg)
                 .cursor_pointer()
-                .text_size(px(10.0))
-                .child(if self.collapsed { "▾" } else { "▴" })
+                .child(
+                    div().text_size(px(7.5)).text_color(ot.ctx_text).child("打印工具"),
+                )
+                .child(
+                    div().text_size(px(12.5)).text_color(ot.ctx_text).child("打印格式"),
+                ),
+        );
+
+        strip = strip.child(div().flex_1());
+
+        // Options ▾ + 折叠
+        strip = strip.child(
+            div()
+                .id("ribbon-options")
+                .h_flex()
+                .items_center()
+                .gap_1()
+                .px_2()
+                .text_color(ot.tab_text)
+                .text_size(px(11.5))
+                .cursor_pointer()
+                .hover(|s| s.bg(ot.title_bg))
+                .child("?")
+                .child("选项 ▾")
                 .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
                     this.collapsed = !this.collapsed;
                     cx.notify();
@@ -193,6 +247,7 @@ impl RibbonBar {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     fn render_group(
         &self,
         tab_ix: usize,
@@ -201,6 +256,7 @@ impl RibbonBar {
         level: Level,
         snap: &RibbonSnapshot,
         filter: &Entity<InputState>,
+        ot: &OfficeTheme,
         theme: &Theme,
     ) -> AnyElement {
         let key = format!("t{tab_ix}g{group_ix}");
@@ -208,7 +264,7 @@ impl RibbonBar {
             Level::Full => {
                 let mut items = Vec::with_capacity(group.items.len());
                 for (ii, item) in group.items.iter().enumerate() {
-                    items.push(self.render_item(&format!("{key}i{ii}"), item, snap, filter, theme));
+                    items.push(self.render_item(&format!("{key}i{ii}"), item, snap, filter, ot, theme));
                 }
                 div().flex().flex_row().items_start().h_full().children(items).into_any_element()
             }
@@ -222,17 +278,18 @@ impl RibbonBar {
             Level::Flyout => flyout_button(&key, group, snap, filter, theme).into_any_element(),
         };
 
-        // 组标题：注册了扩展的组是"标题 ▾"按钮，点开工具网格（可再进子选项）
-        let title: AnyElement = match group.ext {
-            Some(ext) if level != Level::Flyout => {
+        // 组标题：组名（居中）+ 右下角对话框启动器；扩展组为"标题 ▾"
+        let has_ext = group.ext.is_some();
+        let title: AnyElement = match (group.ext, level) {
+            (Some(ext), Level::Full) => {
                 ext_title_button(&key, group, ext, snap, theme).into_any_element()
             }
             _ => div()
                 .h(px(15.0))
                 .flex().items_center().justify_center()
                 .text_size(px(10.0))
-                .when(level == Level::Flyout, |el| el.text_color(theme.accent))
-                .text_color(theme.muted_foreground)
+                .when(level == Level::Flyout, |el| el.text_color(ot.accent))
+                .text_color(ot.group_name)
                 .child(SharedString::from(group.name))
                 .into_any_element(),
         };
@@ -240,11 +297,38 @@ impl RibbonBar {
         div()
             .flex().flex_col()
             .border_l_1()
-            .border_color(theme.border)
+            .border_color(ot.group_line)
             .px_2()
             .mx_1()
             .child(div().flex().flex_row().items_start().h_full().child(body))
-            .child(title)
+            .child(
+                div()
+                    .h_flex()
+                    .items_center()
+                    .child(
+                        div().flex_1().child(title),
+                    )
+                    .when(has_ext && level == Level::Full, |el| {
+                        // 对话框启动器（ Office 风格组角标）
+                        el.child(
+                            div()
+                                .id(ElementId::Name(format!("{key}-launcher").into()))
+                                .size(px(9.0))
+                                .rounded_xs()
+                                .border_1()
+                                .border_color(ot.group_line)
+                                .flex().items_center().justify_center()
+                                .text_size(px(5.0))
+                                .text_color(ot.group_name)
+                                .hover(move |s| s.bg(ot.hover).border_color(ot.hover_border))
+                                .cursor_pointer()
+                                .child("[]")
+                                .on_click(move |_, _, cx| {
+                                    state::run_command(&format!("{}_options", group.name), cx)
+                                }),
+                        )
+                    }),
+            )
             .into_any_element()
     }
 
@@ -254,6 +338,7 @@ impl RibbonBar {
         item: &RibbonItem,
         snap: &RibbonSnapshot,
         filter: &Entity<InputState>,
+        ot: &OfficeTheme,
         theme: &Theme,
     ) -> AnyElement {
         match item {
@@ -281,6 +366,22 @@ impl RibbonBar {
                 labeled_split(key, icon, label, cmd, menu, snap, theme).into_any_element()
             }
             RibbonItem::LayerCombo => layer_combo(key, snap, filter, theme).into_any_element(),
+            RibbonItem::PasteGroup { icon, label, cmd, sides } => {
+                crate::office_widgets::render_paste_group(key, icon, label, cmd, sides, ot)
+                    .into_any_element()
+            }
+            RibbonItem::ComboRow { items } => {
+                crate::office_widgets::render_combo_row(key, items, ot).into_any_element()
+            }
+            RibbonItem::CharFlow { buttons } => {
+                crate::office_widgets::render_char_flow(key, buttons, ot).into_any_element()
+            }
+            RibbonItem::SpinRow { items } => {
+                crate::office_widgets::render_spin_row(key, items, ot).into_any_element()
+            }
+            RibbonItem::ActionRow { items } => {
+                crate::office_widgets::render_action_row(key, items, ot).into_any_element()
+            }
         }
     }
 
@@ -307,6 +408,27 @@ impl RibbonBar {
             RibbonItem::LayerCombo => {
                 col = col.child(mini_tool(&format!("{key}m"), "layers/panel.svg", "layer", theme));
             }
+            RibbonItem::PasteGroup { icon, cmd, .. } => {
+                col = col.child(mini_tool(&format!("{key}m"), icon, cmd, theme));
+            }
+            RibbonItem::ComboRow { .. } => {
+                col = col.child(mini_tool(&format!("{key}m"), "ui/gear.svg", "combo", theme));
+            }
+            RibbonItem::CharFlow { buttons, .. } => {
+                if let Some(b) = buttons.first() {
+                    col = col.child(mini_tool(&format!("{key}m"), "text.svg", b.cmd, theme));
+                }
+            }
+            RibbonItem::SpinRow { items, .. } => {
+                if let Some(s) = items.first() {
+                    col = col.child(mini_tool(&format!("{key}m"), "status/lwt.svg", s.cmd, theme));
+                }
+            }
+            RibbonItem::ActionRow { items, .. } => {
+                if let Some(a) = items.first() {
+                    col = col.child(mini_tool(&format!("{key}m"), "ui/gear.svg", a.cmd, theme));
+                }
+            }
         }
         col.into_any_element()
     }
@@ -328,6 +450,11 @@ fn tool_button_base(key: &str, w: f32, h: f32, active: bool) -> Stateful<gpui_ki
         .when(active, |el| el.bg(rgba(0x0696d74d)))
         .hover(move |s| s.bg(if active { rgba(0x0696d760) } else { rgba(0x0696d726) }))
         .active(|s| s.bg(rgba(0x0696d780)))
+}
+
+/// 渲染深处取 Office 主题（init 时缓存）。
+fn ot() -> OfficeTheme {
+    crate::office_widgets::ot_cached()
 }
 
 fn tip_text(label: &str, cmd: &str) -> SharedString {
@@ -1122,6 +1249,15 @@ fn representative(group: &RibbonGroup, snap: &RibbonSnapshot) -> (&'static str, 
                     return (icon, cmd);
                 }
             }
+            RibbonItem::PasteGroup { icon, cmd, .. } => {
+                if snap.is_active(cmd) {
+                    return (icon, cmd);
+                }
+            }
+            RibbonItem::ComboRow { .. }
+            | RibbonItem::CharFlow { .. }
+            | RibbonItem::SpinRow { .. }
+            | RibbonItem::ActionRow { .. } => {}
             RibbonItem::LayerCombo => {}
         }
     }
@@ -1145,6 +1281,17 @@ fn first_icon_cmd(group: &RibbonGroup) -> Option<(&'static str, &'static str)> {
                 }
             }
             RibbonItem::LabeledSplit { icon, cmd, .. } => return Some((icon, cmd)),
+            RibbonItem::PasteGroup { icon, cmd, .. } => return Some((icon, cmd)),
+            RibbonItem::ComboRow { .. } => return Some(("ui/gear.svg", "combo")),
+            RibbonItem::CharFlow { buttons, .. } => {
+                return buttons.first().map(|b| ("text.svg", b.cmd));
+            }
+            RibbonItem::SpinRow { items, .. } => {
+                return items.first().map(|s| ("status/lwt.svg", s.cmd));
+            }
+            RibbonItem::ActionRow { items, .. } => {
+                return items.first().map(|a| ("ui/gear.svg", a.cmd));
+            }
             RibbonItem::LayerCombo => return Some(("layers/panel.svg", "layer")),
         }
     }
@@ -1192,6 +1339,33 @@ fn flyout_panel(
                     .into_any_element()
             }
             RibbonItem::LayerCombo => layer_combo(&format!("fly{k}"), snap, filter, theme),
+            RibbonItem::PasteGroup { icon, label, cmd, sides } => {
+                crate::office_widgets::render_paste_group(
+                    &format!("fly{k}p"),
+                    icon,
+                    label,
+                    cmd,
+                    sides,
+                    &ot(),
+                )
+                .into_any_element()
+            }
+            RibbonItem::ComboRow { items } => {
+                crate::office_widgets::render_combo_row(&format!("fly{k}c"), items, &ot())
+                    .into_any_element()
+            }
+            RibbonItem::CharFlow { buttons } => {
+                crate::office_widgets::render_char_flow(&format!("fly{k}f"), buttons, &ot())
+                    .into_any_element()
+            }
+            RibbonItem::SpinRow { items } => {
+                crate::office_widgets::render_spin_row(&format!("fly{k}s"), items, &ot())
+                    .into_any_element()
+            }
+            RibbonItem::ActionRow { items } => {
+                crate::office_widgets::render_action_row(&format!("fly{k}a"), items, &ot())
+                    .into_any_element()
+            }
         };
         row.push(cell);
         k += 1;
