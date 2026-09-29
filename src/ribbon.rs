@@ -558,10 +558,12 @@ fn large_tool(
     attach_tooltip(
         tool_button_base(key, LARGE_W, LARGE_H, active)
             .flex().flex_col()
-            .py_1()
+            .pt_1()
             .on_click(move |_, _, cx| state::run_tool(cmd, cx))
+            // 与 split_large 的 face 完全同构：图标区/标签行位置一致（微软规范），
+            // 底部 12px 条留空（分裂按钮在该条放 ▾）
             .child(
-                div().flex_1().flex().items_center().justify_center()
+                div().h(px(33.0)).flex().items_center().justify_center()
                     .child(img(icons::icon(icon)).size(px(30.0))),
             )
             .child(
@@ -571,7 +573,8 @@ fn large_tool(
                     .text_size(px(10.5))
                     .text_color(theme.foreground)
                     .child(SharedString::from(label)),
-            ),
+            )
+            .child(div().h(px(12.0))),
         tip_text(label, cmd),
     )
 }
@@ -596,20 +599,23 @@ fn split_large(
         .id(ElementId::Name(key.into()))
         .flex().flex_col()
         .w(px(LARGE_W))
-        .h_full()
+        .h(px(LARGE_H))
         .rounded_sm()
         .cursor_pointer()
         .when(active, |el| el.bg(rgba(0x0696d74d)))
         .hover(move |s| s.bg(if active { rgba(0x0696d760) } else { rgba(0x0696d726) }))
         .child(
+            // face 与 large_tool 同构（4 + 图标区 33 + 标签 13）：
+            // 两类大按钮的图标与文字位置完全一致（微软规范）
             attach_tooltip(
                 div()
                     .id(ElementId::Name(format!("{key}-main").into()))
-                    .h_full()
+                    .h(px(LARGE_H - 12.0))
                     .flex().flex_col()
+                    .pt_1()
                     .on_click(move |_, _, cx| state::run_tool(face_cmd, cx))
                     .child(
-                        div().flex_1().flex().items_center().justify_center()
+                        div().h(px(33.0)).flex().items_center().justify_center()
                             .child(img(icons::icon(face_icon)).size(px(30.0))),
                     )
                     .child(
@@ -623,7 +629,7 @@ fn split_large(
                 tip_text(face_label, face_cmd),
             ),
         )
-        // 箭头条占满按钮宽度（箭头居中）：菜单贴按钮下方、左缘对齐
+        // ▾ 条占满按钮宽度（箭头居中）：菜单贴按钮下方、左缘对齐
         .child(
             div().w_full().h(px(12.0)).child(
                 Button::new(caret_id)
