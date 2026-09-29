@@ -2,3 +2,4 @@
 target/
 *.png
 !docs/*.png
+fix_*.js
