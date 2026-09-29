@@ -7,15 +7,19 @@
 
 /// 分裂按钮的菜单项：(图标, 标签, 命令)
 pub type MenuEntry = (&'static str, &'static str, &'static str);
-/// 小工具列中的一项：(图标, 提示文本, 命令)
-pub type ToolEntry = (&'static str, &'static str, &'static str);
+/// 小工具：图标 + 文字标签（所有命令必须有文字标签，见 HANDOFF §5 用户准则）。
+pub struct Tool {
+    pub icon: &'static str,
+    pub label: &'static str,
+    pub cmd: &'static str,
+}
 /// 扩展面板里工具的子选项：(标签, 命令)
 pub type ExtOption = (&'static str, &'static str);
 
 /// 带菜单的小工具（下拉 id 即 cmd，命令名天然唯一）。
 pub struct SmallSplit {
     pub icon: &'static str,
-    pub tip: &'static str,
+    pub label: &'static str,
     pub cmd: &'static str,
     pub menu: &'static [MenuEntry],
 }
@@ -43,9 +47,9 @@ pub enum RibbonItem {
         cmd: &'static str,
         menu: &'static [MenuEntry],
     },
-    /// 小工具竖排列。
-    Column { tools: &'static [ToolEntry] },
-    /// 小工具竖排列，个别项可带下拉箭头。
+    /// 小工具行：图标上/文字下的带标签小按钮，横排一行。
+    Column { tools: &'static [Tool] },
+    /// 小工具行，个别项可带下拉箭头。
     SplitColumn { tools: &'static [SmallSplit] },
     /// 横向按钮：左图标 + 右文字 + 小箭头（下拉 id 即 cmd）。
     LabeledSplit {
@@ -251,22 +255,22 @@ pub fn tabs() -> &'static Vec<RibbonTab> {
                                 tools: &[
                                     SmallSplit {
                                         icon: "point.svg",
-                                        tip: "点",
+                                        label: "点",
                                         cmd: "point",
                                         menu: &[
                                             ("point.svg", "单点", "point"),
                                             ("multipoint.svg", "多点", "multipoint"),
                                         ],
                                     },
-                                    SmallSplit { icon: "ray.svg", tip: "射线", cmd: "ray", menu: &[] },
-                                    SmallSplit { icon: "xline.svg", tip: "构造线", cmd: "xline", menu: &[] },
+                                    SmallSplit { icon: "ray.svg", label: "射线", cmd: "ray", menu: &[] },
+                                    SmallSplit { icon: "xline.svg", label: "构造线", cmd: "xline", menu: &[] },
                                 ],
                             },
                             RibbonItem::Column {
                                 tools: &[
-                                    ("spline.svg", "样条曲线", "spline"),
-                                    ("donut.svg", "圆环", "donut"),
-                                    ("helix.svg", "螺旋线", "helix"),
+                                    Tool { icon: "spline.svg", label: "样条曲线", cmd: "spline" },
+                                    Tool { icon: "donut.svg", label: "圆环", cmd: "donut" },
+                                    Tool { icon: "helix.svg", label: "螺旋线", cmd: "helix" },
                                 ],
                             },
                         ],
@@ -293,16 +297,16 @@ pub fn tabs() -> &'static Vec<RibbonTab> {
                             },
                             RibbonItem::Column {
                                 tools: &[
-                                    ("trim.svg", "修剪", "trim"),
-                                    ("extend.svg", "延伸", "extend"),
-                                    ("offset.svg", "偏移", "offset"),
+                                    Tool { icon: "trim.svg", label: "修剪", cmd: "trim" },
+                                    Tool { icon: "extend.svg", label: "延伸", cmd: "extend" },
+                                    Tool { icon: "offset.svg", label: "偏移", cmd: "offset" },
                                 ],
                             },
                             RibbonItem::SplitColumn {
                                 tools: &[
                                     SmallSplit {
                                         icon: "fillet.svg",
-                                        tip: "圆角",
+                                        label: "圆角",
                                         cmd: "fillet",
                                         menu: &[
                                             ("fillet.svg", "圆角", "fillet"),
@@ -311,21 +315,21 @@ pub fn tabs() -> &'static Vec<RibbonTab> {
                                     },
                                     SmallSplit {
                                         icon: "chamfer.svg",
-                                        tip: "倒角",
+                                        label: "倒角",
                                         cmd: "chamfer",
                                         menu: &[
                                             ("chamfer.svg", "倒角", "chamfer"),
                                             ("model/chamfer.svg", "倒角边", "chamfer_edge"),
                                         ],
                                     },
-                                    SmallSplit { icon: "modify_break.svg", tip: "打断", cmd: "break", menu: &[] },
+                                    SmallSplit { icon: "modify_break.svg", label: "打断", cmd: "break", menu: &[] },
                                 ],
                             },
                             RibbonItem::Column {
                                 tools: &[
-                                    ("erase.svg", "删除", "erase"),
-                                    ("explode.svg", "分解", "explode"),
-                                    ("modify_join.svg", "合并", "join"),
+                                    Tool { icon: "erase.svg", label: "删除", cmd: "erase" },
+                                    Tool { icon: "explode.svg", label: "分解", cmd: "explode" },
+                                    Tool { icon: "modify_join.svg", label: "合并", cmd: "join" },
                                 ],
                             },
                         ],
@@ -406,37 +410,37 @@ pub fn tabs() -> &'static Vec<RibbonTab> {
                             RibbonItem::Large { icon: "constrain/auto.svg", label: "自动约束", cmd: "auto_constrain" },
                             RibbonItem::Column {
                                 tools: &[
-                                    ("constrain/coincident.svg", "重合", "gccoincident"),
-                                    ("constrain/parallel.svg", "平行", "gcparallel"),
-                                    ("constrain/tangent.svg", "相切", "gctangent"),
+                                    Tool { icon: "constrain/coincident.svg", label: "重合", cmd: "gccoincident" },
+                                    Tool { icon: "constrain/parallel.svg", label: "平行", cmd: "gcparallel" },
+                                    Tool { icon: "constrain/tangent.svg", label: "相切", cmd: "gctangent" },
                                 ],
                             },
                             RibbonItem::Column {
                                 tools: &[
-                                    ("constrain/perpendicular.svg", "垂直", "gcperpendicular"),
-                                    ("constrain/colinear.svg", "共线", "gccollinear"),
-                                    ("constrain/concentric.svg", "同心", "gcconcentric"),
+                                    Tool { icon: "constrain/perpendicular.svg", label: "垂直", cmd: "gcperpendicular" },
+                                    Tool { icon: "constrain/colinear.svg", label: "共线", cmd: "gccollinear" },
+                                    Tool { icon: "constrain/concentric.svg", label: "同心", cmd: "gcconcentric" },
                                 ],
                             },
                             RibbonItem::Column {
                                 tools: &[
-                                    ("constrain/horizontal.svg", "水平", "gchorizontal"),
-                                    ("constrain/vertical.svg", "竖直", "gcvertical"),
-                                    ("constrain/symmetric.svg", "对称", "gcsymmetric"),
+                                    Tool { icon: "constrain/horizontal.svg", label: "水平", cmd: "gchorizontal" },
+                                    Tool { icon: "constrain/vertical.svg", label: "竖直", cmd: "gcvertical" },
+                                    Tool { icon: "constrain/symmetric.svg", label: "对称", cmd: "gcsymmetric" },
                                 ],
                             },
                             RibbonItem::Column {
                                 tools: &[
-                                    ("constrain/fixed.svg", "固定", "gcfixed"),
-                                    ("constrain/equal.svg", "相等", "gcequal"),
-                                    ("constrain/smooth.svg", "平滑", "gcsmooth"),
+                                    Tool { icon: "constrain/fixed.svg", label: "固定", cmd: "gcfixed" },
+                                    Tool { icon: "constrain/equal.svg", label: "相等", cmd: "gcequal" },
+                                    Tool { icon: "constrain/smooth.svg", label: "平滑", cmd: "gcsmooth" },
                                 ],
                             },
                             RibbonItem::Column {
                                 tools: &[
-                                    ("constrain/show.svg", "显示约束", "constraintbar"),
-                                    ("constrain/show_all.svg", "全部显示", "constraint_show_all"),
-                                    ("constrain/hide_all.svg", "全部隐藏", "constraint_hide_all"),
+                                    Tool { icon: "constrain/show.svg", label: "显示约束", cmd: "constraintbar" },
+                                    Tool { icon: "constrain/show_all.svg", label: "全部显示", cmd: "constraint_show_all" },
+                                    Tool { icon: "constrain/hide_all.svg", label: "全部隐藏", cmd: "constraint_hide_all" },
                                 ],
                             },
                         ],
@@ -449,9 +453,9 @@ pub fn tabs() -> &'static Vec<RibbonTab> {
                             RibbonItem::Large { icon: "constrain/distance_x.svg", label: "水平", cmd: "dimconstraint_x" },
                             RibbonItem::Column {
                                 tools: &[
-                                    ("constrain/angle.svg", "角度", "dimconstraint_ang"),
-                                    ("dim_radius.svg", "半径", "dimconstraint_rad"),
-                                    ("constrain/convert.svg", "转换", "dimconstraint_convert"),
+                                    Tool { icon: "constrain/angle.svg", label: "角度", cmd: "dimconstraint_ang" },
+                                    Tool { icon: "dim_radius.svg", label: "半径", cmd: "dimconstraint_rad" },
+                                    Tool { icon: "constrain/convert.svg", label: "转换", cmd: "dimconstraint_convert" },
                                 ],
                             },
                         ],
@@ -524,9 +528,9 @@ pub fn tabs() -> &'static Vec<RibbonTab> {
                             RibbonItem::Large { icon: "zoom_ext.svg", label: "范围缩放", cmd: "zoom_extents" },
                             RibbonItem::Column {
                                 tools: &[
-                                    ("zoom_in.svg", "放大", "zoom_in"),
-                                    ("zoom_out.svg", "缩小", "zoom_out"),
-                                    ("zoom_window.svg", "窗口缩放", "zoom_window"),
+                                    Tool { icon: "zoom_in.svg", label: "放大", cmd: "zoom_in" },
+                                    Tool { icon: "zoom_out.svg", label: "缩小", cmd: "zoom_out" },
+                                    Tool { icon: "zoom_window.svg", label: "窗口缩放", cmd: "zoom_window" },
                                 ],
                             },
                             RibbonItem::Large { icon: "pan.svg", label: "平移", cmd: "pan" },
@@ -564,9 +568,9 @@ pub fn tabs() -> &'static Vec<RibbonTab> {
                         ext: None,
                         items: vec![RibbonItem::Column {
                             tools: &[
-                                ("status/cleanscreen.svg", "全屏显示", "cleanscreen"),
-                                ("viewcube.svg", "ViewCube", "navvcube"),
-                                ("ucs_icon.svg", "UCS 图标", "ucsicon"),
+                                Tool { icon: "status/cleanscreen.svg", label: "全屏显示", cmd: "cleanscreen" },
+                                Tool { icon: "viewcube.svg", label: "ViewCube", cmd: "navvcube" },
+                                Tool { icon: "ucs_icon.svg", label: "UCS 图标", cmd: "ucsicon" },
                             ],
                         }],
                     },
@@ -619,10 +623,53 @@ pub const MINI_W: f32 = 26.0;
 pub const GROUP_PAD: f32 = 26.0;
 pub const FLYOUT_W: f32 = 58.0;
 
+/// 带文字标签的小按钮（图标上/文字下）：宽、高、按钮间距。
+pub const STACK_W: f32 = 46.0;
+pub const STACK_H: f32 = 40.0;
+pub const STACK_GAP: f32 = 2.0;
+
+/// 小工具行（Column/SplitColumn）整行的宽度。
+pub fn stack_row_width(n: usize) -> f32 {
+    if n == 0 {
+        0.0
+    } else {
+        n as f32 * STACK_W + (n - 1) as f32 * STACK_GAP
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 单键快捷键表（demo 用合理子集；tooltip 第三行与此联动）
+// ---------------------------------------------------------------------------
+
+/// (键, 命令)。gpui 版经 ToolAction 绑定到窗口；两前端 tooltip 共用。
+pub const TOOL_KEYS: &[(&str, &str)] = &[
+    ("L", "line"),
+    ("P", "pline"),
+    ("C", "circle"),
+    ("A", "arc"),
+    ("R", "rectang"),
+    ("E", "erase"),
+    ("M", "move"),
+    ("O", "offset"),
+    ("F", "fillet"),
+    ("T", "mtext"),
+    ("B", "block"),
+    ("Z", "zoom_extents"),
+];
+
+/// 命令的单键快捷键（无则 None）。
+pub fn shortcut_of(cmd: &str) -> Option<&'static str> {
+    TOOL_KEYS
+        .iter()
+        .find(|(_, c)| *c == cmd)
+        .map(|(k, _)| *k)
+}
+
 pub fn item_width_full(item: &RibbonItem) -> f32 {
     match item {
         RibbonItem::Large { .. } | RibbonItem::SplitLarge { .. } => LARGE_W,
-        RibbonItem::Column { .. } | RibbonItem::SplitColumn { .. } => MINI_W,
+        RibbonItem::Column { tools } => stack_row_width(tools.len()),
+        RibbonItem::SplitColumn { tools } => stack_row_width(tools.len()),
         RibbonItem::LayerCombo => 110.0,
         RibbonItem::LabeledSplit { .. } => 104.0,
         // Office 形态

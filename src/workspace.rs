@@ -6,12 +6,13 @@ use gpui_kit::component::StyledExt;
 use gpui_kit::component::slider::{Slider, SliderState};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::{
-    div, img, px, rgb, AppContext as _, Context, ElementId, Entity, IntoElement,
-    InteractiveElement as _, ParentElement, Render, SharedString, Stateful,
+    div, img, px, rgb, AppContext as _, Context, ElementId, Entity, Focusable as _, FocusHandle,
+    IntoElement, InteractiveElement as _, ParentElement, Render, SharedString, Stateful,
     StatefulInteractiveElement as _, Styled, Subscription, Window,
 };
 
 use crate::icons;
+use crate::keys::ToolAction;
 use crate::office_widgets::office_theme;
 use crate::ribbon::RibbonBar;
 use crate::state::{self, AppEvent};
@@ -21,6 +22,8 @@ pub struct Workspace {
     ribbon: Entity<RibbonBar>,
     dock_area: Entity<DockArea>,
     zoom: Entity<SliderState>,
+    /// 命令行面板的焦点句柄（单键工具：焦点在其子树时按键归输入）。
+    cmd_input_focus: FocusHandle,
     _sub: Option<Subscription>,
 }
 
@@ -28,6 +31,7 @@ impl Workspace {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let (canvas, command_line, properties, layers, palette) =
             crate::panels::build_panels(window, cx);
+        let cmd_input_focus = command_line.focus_handle(cx);
 
         let dock_area = cx.new(|cx| {
             DockArea::new("cad-main", Some(1), window, cx)
@@ -60,8 +64,19 @@ impl Workspace {
             ribbon: cx.new(|cx| RibbonBar::new(window, cx)),
             dock_area,
             zoom,
+            cmd_input_focus,
             _sub: sub,
         }
+    }
+
+    /// 单键工具绑定：焦点在命令行面板子树内时按键归输入，不触发工具。
+    /// Input 元素实际聚焦的是其内部 frame 句柄（非 InputState::focus_handle），
+    /// 因此用 contains_focused 沿焦点树判断，而非句柄相等。
+    fn on_tool_key(&mut self, action: &ToolAction, window: &Window, cx: &mut Context<Self>) {
+        if self.cmd_input_focus.contains_focused(window, cx) {
+            return;
+        }
+        state::run_tool(action.0, cx);
     }
 
     /// Office 风格状态栏：状态文字 | 坐标 | 捕捉开关 | 视图 | 缩放 | 主题切换。
@@ -210,6 +225,9 @@ impl Render for Workspace {
             .size_full()
             .bg(ot.tool_bg)
             .text_color(ot.text)
+            .on_action(cx.listener(|this, action: &ToolAction, window, cx| {
+                this.on_tool_key(action, window, cx)
+            }))
             .child(ribbon_el)
             .child(div().flex_1().min_h_0().child(self.dock_area.clone()))
             .child(self.render_status_bar(cx))

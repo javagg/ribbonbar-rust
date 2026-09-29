@@ -7,6 +7,7 @@
 //!   停靠面板 + 中央模型视口，支持拖动标签、分合、缩放与尺寸调整。
 
 mod icons;
+mod keys;
 mod office_widgets;
 mod theme;
 mod panels;
@@ -21,6 +22,7 @@ fn main() {
     let app = gpui_kit::application().with_assets(icons::CadAssetSource);
     app.run(move |cx: &mut App| {
         gpui_kit::init(cx);
+        keys::bind(cx);
         state::init(cx);
         office_widgets::init_office_theme(theme::OfficePreset::Blue, cx);
         setup_theme(cx);

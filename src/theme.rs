@@ -30,7 +30,6 @@ pub struct OfficeTheme {
     /// 上下文标签（第二主题色）背景与文字
     pub ctx_bg: Hsla,
     pub ctx_text: Hsla,
-    pub ctx_bar: Hsla,
     /// 工具区（白）
     pub tool_bg: Hsla,
     /// 按钮三态
@@ -65,7 +64,6 @@ pub fn office_blue() -> OfficeTheme {
     tab_text: rgb(0xeef2fa),
     ctx_bg: rgb(0xe8b4c8),
     ctx_text: rgb(0x6b1f3a),
-    ctx_bar: rgb(0xd89ab5),
     tool_bg: rgb(0xffffff),
     hover: rgb(0xcde3f7),
     hover_border: rgb(0x7eb4ea),
@@ -94,7 +92,6 @@ pub fn office_green() -> OfficeTheme {
     tab_text: rgb(0xf2f8ec),
     ctx_bg: rgb(0xf0c060),
     ctx_text: rgb(0x6b4a10),
-    ctx_bar: rgb(0xe0b050),
     tool_bg: rgb(0xffffff),
     hover: rgb(0xe0f0c8),
     hover_border: rgb(0x9cc86a),

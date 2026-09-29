@@ -43,7 +43,6 @@ const CONTENT_H: f32 = 82.0;
 pub struct RibbonBar {
     pub active: usize,
     pub collapsed: bool,
-    pub preset: crate::theme::OfficePreset,
     row_width: f32,
     /// 图层下拉的搜索框（复用实体，内容闭包里读它的 value 做过滤）。
     layer_filter: Entity<InputState>,
@@ -59,7 +58,7 @@ impl RibbonBar {
         .detach();
         // 首帧即用视口宽度决定降级档位（prepaint 阶段的 notify 不可靠）
         let viewport_w = window.viewport_size().width.as_f32();
-        Self { active: 0, collapsed: false, preset: crate::theme::OfficePreset::Blue, row_width: viewport_w, layer_filter }
+        Self { active: 0, collapsed: false, row_width: viewport_w, layer_filter }
     }
 
     pub fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -357,18 +356,18 @@ impl RibbonBar {
                 split_large(key, dd, icon, label, cmd, menu, snap, theme).into_any_element()
             }
             RibbonItem::Column { tools } => {
-                let mut col = div().flex().flex_col().gap_0p5();
-                for (k, (icon, tip, cmd)) in tools.iter().enumerate() {
-                    col = col.child(small_tool(&format!("{key}s{k}"), icon, tip, cmd, snap, theme));
+                let mut row = div().flex().flex_row().gap_px();
+                for (k, t) in tools.iter().enumerate() {
+                    row = row.child(small_tool(&format!("{key}s{k}"), t.icon, t.label, t.cmd, snap, theme));
                 }
-                col.into_any_element()
+                row.into_any_element()
             }
             RibbonItem::SplitColumn { tools } => {
-                let mut col = div().flex().flex_col().gap_0p5();
+                let mut row = div().flex().flex_row().gap_px();
                 for (k, t) in tools.iter().enumerate() {
-                    col = col.child(split_small(&format!("{key}s{k}"), t, snap, theme));
+                    row = row.child(split_small(&format!("{key}s{k}"), t, snap, theme));
                 }
-                col.into_any_element()
+                row.into_any_element()
             }
             RibbonItem::LabeledSplit { icon, label, cmd, menu } => {
                 labeled_split(key, icon, label, cmd, menu, snap, theme).into_any_element()
@@ -401,8 +400,8 @@ impl RibbonBar {
                 col = col.child(mini_tool(&format!("{key}m"), icon, cmd, theme));
             }
             RibbonItem::Column { tools } => {
-                for (k, (icon, _tip, cmd)) in tools.iter().enumerate() {
-                    col = col.child(mini_tool(&format!("{key}s{k}"), icon, cmd, theme));
+                for (k, t) in tools.iter().enumerate() {
+                    col = col.child(mini_tool(&format!("{key}s{k}"), t.icon, t.cmd, theme));
                 }
             }
             RibbonItem::SplitColumn { tools } => {
@@ -466,7 +465,10 @@ fn ot() -> OfficeTheme {
 }
 
 fn tip_text(label: &str, cmd: &str) -> SharedString {
-    SharedString::from(format!("{label}\n命令: {cmd}"))
+    match shortcut_of(cmd) {
+        Some(key) => SharedString::from(format!("{label}\n命令: {cmd}\n快捷键: {key}")),
+        None => SharedString::from(format!("{label}\n命令: {cmd}")),
+    }
 }
 
 fn attach_tooltip(el: Stateful<gpui_kit::Div>, text: SharedString) -> Stateful<gpui_kit::Div> {
@@ -683,73 +685,96 @@ fn build_menu(popup: PopupMenu, menu: &'static [MenuEntry], dd: &'static str) ->
     m
 }
 
+/// 带文字标签的小按钮：图标上/文字下（用户准则：所有命令必须有文字标签）。
 fn small_tool(
     key: &str,
     icon: &'static str,
-    tip: &str,
+    label: &str,
     cmd: &'static str,
     snap: &RibbonSnapshot,
-    _theme: &Theme,
+    theme: &Theme,
 ) -> Stateful<gpui_kit::Div> {
     let active = snap.is_active(cmd);
     attach_tooltip(
-        tool_button_base(key, 23.0, 23.0, active)
+        tool_button_base(key, STACK_W, STACK_H, active)
+            .flex().flex_col()
             .items_center().justify_center()
+            .gap_0p5()
             .on_click(move |_, _, cx| state::run_tool(cmd, cx))
-            .child(img(icons::icon(icon)).size(px(16.0)).flex_shrink_0()),
-        tip_text(tip, cmd),
+            .child(img(icons::icon(icon)).size(px(16.0)).flex_shrink_0())
+            .child(
+                div()
+                    .max_w_full()
+                    .text_size(px(9.0))
+                    .text_color(theme.foreground)
+                    .overflow_hidden()
+                    .child(SharedString::from(label)),
+            ),
+        tip_text(label, cmd),
     )
 }
 
-fn split_small(key: &str, t: &SmallSplit, snap: &RibbonSnapshot, _theme: &Theme) -> Stateful<gpui_kit::Div> {
+/// 带菜单的堆叠小按钮：图标 / ▾ / 文字标签 三层，整块高亮，面随 last_cmd 记忆。
+fn split_small(key: &str, t: &SmallSplit, snap: &RibbonSnapshot, theme: &Theme) -> Stateful<gpui_kit::Div> {
     let caret_id = ElementId::Name(format!("{key}-caret").into());
     let dd: &'static str = t.cmd;
     let icon_field: &'static str = t.icon;
     let menu: &'static [MenuEntry] = t.menu;
-    let (face_icon, face_cmd): (&'static str, &'static str) = match snap.current_of(dd) {
+    let (face_icon, face_label, face_cmd): (&'static str, &'static str, &'static str) = match snap.current_of(dd) {
         Some(cur) => menu
             .iter()
             .find(|(c, _, _)| *c == cur)
-            .map(|(i, _, c)| (*i, *c))
-            .unwrap_or((icon_field, dd)),
-        None => (icon_field, dd),
+            .map(|(i, l, c)| (*i, *l, *c))
+            .unwrap_or((icon_field, t.label, dd)),
+        None => (icon_field, t.label, dd),
     };
     let active = snap.is_active(dd) || t.menu.iter().any(|(c, _, _)| snap.is_active(c));
-    let tip = tip_text(t.tip, face_cmd);
+    let tip = tip_text(face_label, face_cmd);
 
     let el = div()
         .id(ElementId::Name(key.into()))
-        .w(px(MINI_W - 2.0))
-        .h(px(23.0))
+        .w(px(STACK_W))
+        .h(px(STACK_H))
         .rounded_sm()
         .flex().flex_col()
+        .items_center().justify_center()
+        .gap_0p5()
         .cursor_pointer()
         .when(active, |el| el.bg(rgba(0x0696d74d)))
         .hover(move |s| s.bg(if active { rgba(0x0696d760) } else { rgba(0x0696d726) }))
         .child(
             div()
                 .id(ElementId::Name(format!("{key}-main").into()))
-                .flex_1().flex().items_center().justify_center()
+                .flex()
+                .items_center().justify_center()
                 .on_click(move |_, _, cx| state::run_tool(face_cmd, cx))
-                .child(img(icons::icon(face_icon)).size(px(14.0)).flex_shrink_0()),
+                .child(img(icons::icon(face_icon)).size(px(16.0)).flex_shrink_0()),
         );
     let el = if t.menu.is_empty() {
         el
     } else {
         el.child(
-            div().w_full().h(px(8.0)).child(
+            div().w_full().h(px(7.0)).child(
                 Button::new(caret_id)
                     .ghost()
                     .w_full()
-                    .h(px(8.0))
+                    .h(px(7.0))
                     .child(
                         div().w_full().flex().justify_center()
-                            .child(Icon::new(IconName::ChevronDown).size(px(7.0))),
+                            .child(Icon::new(IconName::ChevronDown).size(px(6.0))),
                     )
                     .dropdown_menu(move |popup, _, _| build_menu(popup, menu, dd)),
             ),
         )
     };
+    let el = el.child(
+        div()
+            .max_w_full()
+            .text_size(px(9.0))
+            .text_color(theme.foreground)
+            .overflow_hidden()
+            .child(SharedString::from(face_label)),
+    );
     attach_tooltip(el, tip)
 }
 
@@ -1243,8 +1268,8 @@ fn representative(group: &RibbonGroup, snap: &RibbonSnapshot) -> (&'static str, 
                 }
             }
             RibbonItem::Column { tools } => {
-                if let Some((icon, _, cmd)) = tools.iter().find(|(_, _, c)| snap.is_active(c)) {
-                    return (icon, cmd);
+                if let Some(t) = tools.iter().find(|t| snap.is_active(t.cmd)) {
+                    return (t.icon, t.cmd);
                 }
             }
             RibbonItem::SplitColumn { tools } => {
@@ -1279,8 +1304,8 @@ fn first_icon_cmd(group: &RibbonGroup) -> Option<(&'static str, &'static str)> {
                 return Some((icon, cmd))
             }
             RibbonItem::Column { tools } => {
-                if let Some((icon, _, cmd)) = tools.first() {
-                    return Some((icon, cmd));
+                if let Some(t) = tools.first() {
+                    return Some((t.icon, t.cmd));
                 }
             }
             RibbonItem::SplitColumn { tools } => {
@@ -1329,18 +1354,18 @@ fn flyout_panel(
                     .into_any_element()
             }
             RibbonItem::Column { tools } => {
-                let mut col = div().flex().flex_col().gap_0p5();
-                for (j, (icon, tip, cmd)) in tools.iter().enumerate() {
-                    col = col.child(small_tool(&format!("fly{k}s{j}"), icon, tip, cmd, snap, theme));
+                let mut row = div().flex().flex_row().gap_px();
+                for (j, t) in tools.iter().enumerate() {
+                    row = row.child(small_tool(&format!("fly{k}s{j}"), t.icon, t.label, t.cmd, snap, theme));
                 }
-                col.into_any_element()
+                row.into_any_element()
             }
             RibbonItem::SplitColumn { tools } => {
-                let mut col = div().flex().flex_col().gap_0p5();
+                let mut row = div().flex().flex_row().gap_px();
                 for (j, t) in tools.iter().enumerate() {
-                    col = col.child(split_small(&format!("fly{k}s{j}"), t, snap, theme));
+                    row = row.child(split_small(&format!("fly{k}s{j}"), t, snap, theme));
                 }
-                col.into_any_element()
+                row.into_any_element()
             }
             RibbonItem::LabeledSplit { icon, label, cmd, menu } => {
                 labeled_split(&format!("fly{k}"), icon, label, cmd, menu, snap, theme)

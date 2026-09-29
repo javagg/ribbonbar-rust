@@ -305,6 +305,9 @@ impl Render for CommandLinePanel {
             .v_flex()
             .size_full()
             .bg(theme.background)
+            // 让面板句柄成为输入框（内部 frame 焦点句柄）的焦点树祖先：
+            // 单键工具绑定用 contains_focused 判断焦点是否在命令行内
+            .track_focus(&self.focus_handle)
             .child(
                 div()
                     .id("cmd-log")

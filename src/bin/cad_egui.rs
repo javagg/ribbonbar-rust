@@ -833,7 +833,7 @@ fn split_small(
             egui::Stroke::NONE,
         ));
         if face.hovered() {
-            face.clone().on_hover_text(tip_text(t.tip, face_cmd));
+            face.clone().on_hover_text(tip_text(t.label, face_cmd));
         }
         if face.clicked() {
             model.run_tool(face_cmd);
@@ -1193,8 +1193,8 @@ fn representative(
                 }
             }
             RibbonItem::Column { tools } => {
-                if let Some((icon, _, cmd)) = tools.iter().find(|(_, _, c)| snap.is_active(c)) {
-                    return Some((icon, cmd));
+                if let Some(t) = tools.iter().find(|t| snap.is_active(t.cmd)) {
+                    return Some((t.icon, t.cmd));
                 }
             }
             RibbonItem::SplitColumn { tools } => {
@@ -1207,6 +1207,12 @@ fn representative(
                     return Some((icon, cmd));
                 }
             }
+            // Office 形态项不参与 egui 的"代表工具"选取（egui 同步见 HANDOFF §6.6）
+            RibbonItem::PasteGroup { .. }
+            | RibbonItem::ComboRow { .. }
+            | RibbonItem::CharFlow { .. }
+            | RibbonItem::SpinRow { .. }
+            | RibbonItem::ActionRow { .. } => {}
             RibbonItem::LayerCombo => {}
         }
     }
@@ -1220,12 +1226,23 @@ fn first_icon_cmd(group: &RibbonGroup) -> Option<(&'static str, &'static str)> {
                 return Some((icon, cmd))
             }
             RibbonItem::Column { tools } => {
-                return tools.first().map(|(i, _, c)| (*i, *c));
+                return tools.first().map(|t| (t.icon, t.cmd));
             }
             RibbonItem::SplitColumn { tools } => {
                 return tools.first().map(|t| (t.icon, t.cmd));
             }
             RibbonItem::LabeledSplit { icon, cmd, .. } => return Some((icon, cmd)),
+            RibbonItem::PasteGroup { icon, cmd, .. } => return Some((icon, cmd)),
+            RibbonItem::ComboRow { .. } => return Some(("ui/gear.svg", "combo")),
+            RibbonItem::CharFlow { buttons } => {
+                return buttons.first().map(|b| ("text.svg", b.cmd))
+            }
+            RibbonItem::SpinRow { items } => {
+                return items.first().map(|s| ("status/lwt.svg", s.cmd))
+            }
+            RibbonItem::ActionRow { items } => {
+                return items.first().map(|a| ("ui/gear.svg", a.cmd))
+            }
             RibbonItem::LayerCombo => return Some(("layers/panel.svg", "layer")),
         }
     }
@@ -1251,8 +1268,8 @@ fn render_item(
             split_large(ui, model, icons, key, dd, icon, label, cmd, menu, snap);
         }
         RibbonItem::Column { tools } => {
-            for (k, (icon, tip, cmd)) in tools.iter().enumerate() {
-                small_tool(ui, model, icons, &format!("{key}s{k}"), icon, tip, cmd, snap);
+            for (k, t) in tools.iter().enumerate() {
+                small_tool(ui, model, icons, &format!("{key}s{k}"), t.icon, t.label, t.cmd, snap);
             }
         }
         RibbonItem::SplitColumn { tools } => {
@@ -1263,6 +1280,12 @@ fn render_item(
         RibbonItem::LabeledSplit { icon, label, cmd, menu } => {
             labeled_split(ui, model, icons, key, icon, label, cmd, menu, snap);
         }
+        // Office 形态项 egui 暂不渲染（同步见 HANDOFF §6.6）
+        RibbonItem::PasteGroup { .. }
+        | RibbonItem::ComboRow { .. }
+        | RibbonItem::CharFlow { .. }
+        | RibbonItem::SpinRow { .. }
+        | RibbonItem::ActionRow { .. } => {}
         RibbonItem::LayerCombo => {
             layer_combo(ui, model, icons, key, snap);
         }
@@ -1282,9 +1305,23 @@ fn render_compact(
             RibbonItem::Large { icon, cmd, .. } | RibbonItem::SplitLarge { icon, cmd, .. } => {
                 vec![(icon, cmd)]
             }
-            RibbonItem::Column { tools } => tools.iter().map(|(i, _, c)| (*i, *c)).collect(),
+            RibbonItem::Column { tools } => tools.iter().map(|t| (t.icon, t.cmd)).collect(),
             RibbonItem::SplitColumn { tools } => tools.iter().map(|t| (t.icon, t.cmd)).collect(),
             RibbonItem::LabeledSplit { icon, cmd, .. } => vec![(icon, cmd)],
+            RibbonItem::PasteGroup { icon, cmd, .. } => vec![(icon, cmd)],
+            RibbonItem::ComboRow { .. } => vec![("ui/gear.svg", "combo")],
+            RibbonItem::CharFlow { buttons } => buttons
+                .first()
+                .map(|b| vec![("text.svg", b.cmd)])
+                .unwrap_or_default(),
+            RibbonItem::SpinRow { items } => items
+                .first()
+                .map(|s| vec![("status/lwt.svg", s.cmd)])
+                .unwrap_or_default(),
+            RibbonItem::ActionRow { items } => items
+                .first()
+                .map(|a| vec![("ui/gear.svg", a.cmd)])
+                .unwrap_or_default(),
             RibbonItem::LayerCombo => vec![("layers/panel.svg", "layer")],
         }
     };
