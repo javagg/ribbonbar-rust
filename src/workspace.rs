@@ -12,7 +12,7 @@ use gpui_kit::{
 };
 
 use crate::icons;
-use crate::keys::ToolAction;
+use crate::keys::{CloseAppMenu, ToolAction};
 use crate::office_widgets::office_theme;
 use crate::ribbon::RibbonBar;
 use crate::state::{self, AppEvent};
@@ -69,11 +69,14 @@ impl Workspace {
         }
     }
 
-    /// 单键工具绑定：焦点在命令行面板子树内时按键归输入，不触发工具。
+    /// 单键工具绑定：焦点在命令行面板子树内时按键归输入，不触发工具；
+    /// 应用菜单展开时按键不驱动工具。
     /// Input 元素实际聚焦的是其内部 frame 句柄（非 InputState::focus_handle），
     /// 因此用 contains_focused 沿焦点树判断，而非句柄相等。
     fn on_tool_key(&mut self, action: &ToolAction, window: &Window, cx: &mut Context<Self>) {
-        if self.cmd_input_focus.contains_focused(window, cx) {
+        if state::ribbon_snapshot(cx).app_menu_open
+            || self.cmd_input_focus.contains_focused(window, cx)
+        {
             return;
         }
         state::run_tool(action.0, cx);
@@ -218,6 +221,18 @@ impl Render for Workspace {
         let ot = office_theme(cx);
         let ribbon = self.ribbon.clone();
         let ribbon_el = ribbon.update(cx, |r, cx| r.render(window, cx).into_any_element());
+        // 应用菜单（Backstage）展开时接管功能区以下的全部区域
+        let app_menu_open = state::ribbon_snapshot(cx).app_menu_open;
+        let body: gpui_kit::AnyElement = if app_menu_open {
+            self.ribbon
+                .update(cx, |r, cx| r.render_app_menu(cx).into_any_element())
+        } else {
+            div()
+                .flex_1()
+                .min_h_0()
+                .child(self.dock_area.clone())
+                .into_any_element()
+        };
 
         div()
             .flex()
@@ -228,8 +243,11 @@ impl Render for Workspace {
             .on_action(cx.listener(|this, action: &ToolAction, window, cx| {
                 this.on_tool_key(action, window, cx)
             }))
+            .on_action(cx.listener(|this, _: &CloseAppMenu, _, cx| {
+                this.ribbon.update(cx, |r, cx| r.close_app_menu(cx));
+            }))
             .child(ribbon_el)
-            .child(div().flex_1().min_h_0().child(self.dock_area.clone()))
+            .child(body)
             .child(self.render_status_bar(cx))
     }
 }

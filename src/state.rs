@@ -61,6 +61,7 @@ forward!(layer_toggle(index: usize, kind: &'static str) layer_toggle);
 forward!(set_cursor(pos: Option<(f64, f64)>) set_cursor);
 forward!(set_ext_sub(sub: Option<String>) set_ext_sub);
 forward!(set_ext_open(key: Option<String>) set_ext_open);
+forward!(set_app_menu_open(open: bool) set_app_menu_open);
 
 pub fn select_dropdown(dd: &'static str, cmd: &'static str, cx: &mut App) {
     let Some(entity) = app_state(cx) else { return };

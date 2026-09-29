@@ -13,7 +13,7 @@ CAD 桌面应用 UI 框架 demo：RibbonBar（对照 OpenCADStudio 与 Office Fl
 - **gpui 版** `cargo run --bin cad_demo`（主力，功能最全，Office Fluent 风格）
 - **egui 版** `cargo run --bin cad_egui`（eframe 0.36 + egui_tiles 0.17，同套核心）
 
-仓库 `D:\srcs\gpapp`，分支 master，最新提交 `1b8c5d2`。工具链 **stable 1.98.1**
+仓库 `D:\srcs\gpapp`，分支 master，最新提交见 `git log`。工具链 **stable 1.98.1**
 （不要装 rust-toolchain.toml 固定 nightly——stable 已满足，用户明确要求）。
 
 ## 2. 命令
@@ -65,6 +65,15 @@ docs/                 截图归档 + office-ribbon-style-notes.md（风格研究
   剪贴板式组/组合框行/字符按钮行/数值微调组/横排文字按钮组（含禁用态）、
   状态栏（命令状态+坐标+捕捉开关+视图切换+缩放滑块+蓝绿主题切换）
 - 双击标签折叠/展开功能区；尺寸对齐 Office 规格（`ribbon_data::metrics`）
+- **文字标签 + 单键快捷键体系（§6.1 已完成）**：所有小工具带"图标上/文字下"
+  标签按钮（46×40 横排行，宽度由 decide_levels 自适应吸收）；`ribbon_data::TOOL_KEYS`
+  12 键（L/C/A/R/E/M/O/F/P/T/B/Z）经 `keys::ToolAction`（带参 action, no_json）
+  绑定；tooltip 三行（名称/命令/快捷键）
+- **应用按钮菜单（§6.2 已完成）**：点"文件"展开 Backstage 全屏面板
+  （左列主题色大按钮 新建/打开/保存/另存为/打印+底部"选项"，右列最近文件），
+  展开"文件"高亮、工具区隐藏；返回/Esc/再点"文件"关闭；状态在
+  `CadModel::app_menu_open`（经 AppEvent 驱动 Workspace 主体切换）；
+  右上"选项 ▾"已移除（折叠只剩双击标签）
 
 ## 5. 设计依据文档
 
@@ -79,22 +88,13 @@ docs/                 截图归档 + office-ribbon-style-notes.md（风格研究
 
 **先保证 gpui 版正常**，egui 版同步放后面。
 
-1. **图标+文字标签补全 + 快捷键体系**（一次数据结构改动）
-   - 现状违规：16px 纯图标按钮（约束列/绘图列等）无文字，违反
-     "非肌肉记忆图标必须带文字"
-   - 做法：`ribbon_data` 工具定义加 `label`（竖列小按钮用）与 `shortcut`
-     （LINE→L、CIRCLE→C…）字段；渲染为 图标上/文字下 小按钮（高约 40）；
-     tooltip 变三行（名称 / 命令: X / 快捷键: L）；
-     用 gpui KeyBinding 把单键绑上（焦点不在输入框时）
-2. **应用按钮菜单**：现"文件"只是标签块。改为点击展开全屏菜单面板
-   （左列大按钮 新建/打开/保存/另存为/打印，右列最近文件，底部"选项"）；
-   移除右上"选项 ▾"
-3. **图标按尺寸栅格化**：规范 16/20/32 多尺寸；当前 64px 纹理缩放到 16px 发虚。
+1. **图标按尺寸栅格化**：规范 16/20/32 多尺寸；当前 64px 纹理缩放到 16px 发虚。
    `icon_bytes::prepared_at(rel, size)`；小按钮用 16px 专用笔画
-4. **KeyTips**：Alt 唤出字母徽章（文件=F、绘图=D、直线=L…），键盘逐级导航
-5. QAT 定制菜单（增删命令+最小化开关）、可编辑组合框（Input+Popup）、
+2. **KeyTips**：Alt 唤出字母徽章（文件=F、绘图=D、直线=L…），键盘逐级导航
+3. QAT 定制菜单（增删命令+最小化开关）、可编辑组合框（Input+Popup）、
    对话框启动器弹真对话框（gpui-component dialog）
-6. egui 版同步以上能力（metrics/数据已在 lib，主要补渲染）
+4. egui 版同步以上能力（metrics/数据已在 lib；Office 形态项渲染 + 快捷键，
+   render_item 里 Office 形态分支目前是空臂占位）
 
 ## 7. 踩坑清单（血泪教训，改代码前必读）
 
@@ -112,6 +112,20 @@ docs/                 截图归档 + office-ribbon-style-notes.md（风格研究
   元素 `component::slider::Slider::new(&state)`
 - gpui-component 的 `StyledExt`（h_flex 等）在 `gpui_kit::component::StyledExt`
 - 主题切换要 `cx.refresh_windows()`（`cx.notify()` 需要 EntityId，App 级没有）
+- **带参 action**：`#[derive(Clone, PartialEq, gpui_kit::Action)]` +
+  `#[action(namespace = cad, no_json)]`，payload 走字段；`actions!` 只做 unit action。
+  绑定 `KeyBinding::new("l", ToolAction("line"), None)` + App 级 `cx.bind_keys`，
+  处理器挂窗口根 div `.on_action`
+- **输入框焦点守卫（单键绑定防误触）**：gpui-component Input 点击后聚焦的是
+  Input 元素内部 frame 句柄，**≠** `InputState::focus_handle(cx)`——句柄相等比较
+  永远 false。正确做法：面板根 div `.track_focus(&panel.focus_handle)`，判断用
+  `panel_focus.contains_focused(window, cx)`（沿焦点树找后代）
+- **跨实体 UI 状态（如 Backstage 开关）必须放 CadModel 走 AppEvent::Updated**：
+  放 RibbonBar 字段 + `cx.notify()` 只重绘 RibbonBar，Workspace 的主体切换
+  （dock ↔ 全屏菜单）不会发生
+- **Windows 键盘**：WM_CHAR 文本插入独立于 KeyDown 消费——KeyDown 被绑定吃掉后
+  字符仍会进输入框，所以守卫只需跳过工具、不用手动回放字符；单键绑定注册为
+  小写（`"l"` 而非 `"L"`）
 
 **图标管线**
 - `set_attr` 必须用**前导空格** needle（`" width=\""`），否则吞掉
@@ -138,6 +152,14 @@ docs/                 截图归档 + office-ribbon-style-notes.md（风格研究
 注意 CUA 点击坐标有轻微缩放偏移（图像 1280 vs 窗口 1344），
 小控件（<14px）点不中时先把命中区做大，或从放大截图精确读坐标。
 egui 无输入不重绘，截图前先触发一次交互。
+
+**截图工具**：仓库根 `tmp_shots/capture.ps1`（PrintWindow，不受窗口遮挡影响，
+需 `SetProcessDPIAware`）+ `crop.ps1`（裁剪放大）；归档截图放 `docs/`。
+**键盘注入不可靠**：CUA `pressKey("Escape")` 时好时坏、PowerShell
+`SetForegroundWindow` 常被拒（返回 False 且按键发给别的窗口）——可靠手法：
+先 CUA 点击目标窗口（建立前台），再 PowerShell `SendInput`（tmp_shots/sendesc2.ps1，
+检查输出里 `foreground_is_cad=True`）。判定按键是否进入 gpui 用
+`cx.intercept_keystrokes`（在一切 action 机制之前触发）。
 
 ## 9. 未实现的备忘（规范要求，见 §6 之外的远期项）
 

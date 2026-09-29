@@ -36,6 +36,7 @@ pub struct RibbonSnapshot {
     pub active_layer: String,
     pub ext_sub: Option<String>,
     pub ext_open: Option<String>,
+    pub app_menu_open: bool,
 }
 
 impl RibbonSnapshot {
@@ -89,6 +90,8 @@ pub struct CadModel {
     pub ext_sub: Option<String>,
     /// 打开中的扩展面板组 key（箭头方向与高亮）。
     pub ext_open: Option<String>,
+    /// 应用按钮菜单（Backstage 全屏面板）是否展开。
+    pub app_menu_open: bool,
 }
 
 fn push_undo(s: &mut CadModel, cmd: &str) {
@@ -139,6 +142,7 @@ impl CadModel {
             active_layer: self.active_layer.clone(),
             ext_sub: self.ext_sub.clone(),
             ext_open: self.ext_open.clone(),
+            app_menu_open: self.app_menu_open,
         }
     }
 
@@ -270,5 +274,10 @@ impl CadModel {
             self.ext_sub = None;
         }
         self.ext_open = key;
+    }
+
+    /// 展开/关闭应用按钮菜单（Backstage）。
+    pub fn set_app_menu_open(&mut self, open: bool) {
+        self.app_menu_open = open;
     }
 }

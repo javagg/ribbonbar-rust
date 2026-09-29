@@ -22,7 +22,7 @@ use gpui_kit::component::{ActiveTheme, Icon, IconName, StyledExt};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::{
     div, img, px, rgba, Anchor, AnyElement, AppContext as _, ClickEvent, Context, ElementId, Entity,
-    IntoElement, InteractiveElement as _, ParentElement, SharedString, Stateful,
+    FontWeight, IntoElement, InteractiveElement as _, ParentElement, SharedString, Stateful,
     StatefulInteractiveElement as _, Styled, Window,
 };
 
@@ -68,7 +68,8 @@ impl RibbonBar {
         let snap = state::ribbon_snapshot(cx);
 
         let strip = self.render_tab_strip(window, cx, &snap);
-        let content = (!self.collapsed).then(|| {
+        // Backstage 展开时工具区一并隐藏（Office 行为：只留标签行 + 全屏面板）
+        let content = (!self.collapsed && !snap.app_menu_open).then(|| {
             let tabs = tabs();
             let tab = &tabs[self.active.min(tabs.len() - 1)];
 
@@ -151,7 +152,8 @@ impl RibbonBar {
                 .flex_shrink_0(),
         );
 
-        // File：左端独立块（应用菜单入口）
+        // 文件：应用按钮（点击展开 Backstage 全屏菜单，展开时保持高亮）
+        let menu_open = snap.app_menu_open;
         strip = strip.child(
             div()
                 .id("ribbon-file")
@@ -160,16 +162,20 @@ impl RibbonBar {
                 .flex()
                 .items_center()
                 .rounded_t_sm()
-                .bg(ot.file_bg)
-                .text_color(ot.tab_text)
                 .text_size(px(12.5))
                 .cursor_pointer()
-                .hover(|s| s.bg(ot.title_bg))
+                .when(menu_open, |el| {
+                    el.bg(ot.tab_active_bg).text_color(ot.tab_active_text)
+                })
+                .when(!menu_open, |el| {
+                    el.bg(ot.file_bg)
+                        .text_color(ot.tab_text)
+                        .hover(|s| s.bg(ot.title_bg))
+                })
                 .child("文件")
-                .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
-                    this.active = 0;
-                    cx.notify();
-                })),
+                .on_click(move |_, _, cx| {
+                    state::set_app_menu_open(!menu_open, cx);
+                }),
         );
 
         // 标签页：激活 = 白底黑字（点亮工具区）
@@ -231,25 +237,6 @@ impl RibbonBar {
 
         strip = strip.child(div().flex_1());
 
-        // Options ▾ + 折叠
-        strip = strip.child(
-            div()
-                .id("ribbon-options")
-                .h_flex()
-                .items_center()
-                .gap_1()
-                .px_2()
-                .text_color(ot.tab_text)
-                .text_size(px(11.5))
-                .cursor_pointer()
-                .hover(|s| s.bg(ot.title_bg))
-                .child("?")
-                .child("选项 ▾")
-                .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
-                    this.collapsed = !this.collapsed;
-                    cx.notify();
-                })),
-        );
         strip
     }
 
@@ -1411,4 +1398,162 @@ fn flyout_panel(
         }),
     )
     .into_any_element()
+}
+
+// ---------------------------------------------------------------------------
+// 应用按钮菜单（Office Backstage 风格全屏面板）
+// ---------------------------------------------------------------------------
+
+/// 最近文件（demo 数据）：(文件名, 位置与时间)。
+const RECENT_FILES: &[(&str, &str)] = &[
+    ("厂房平面图.dwg", "D:/projects/plant — 昨天 18:42"),
+    ("办公楼给排水.dwg", "D:/projects/mep — 周五 09:15"),
+    ("demo_block_test.dwg", "D:/tmp — 上周四"),
+    ("site_plan_v2.dwg", "C:/Users/lilu/Documents — 3 月 12 日"),
+];
+
+impl RibbonBar {
+    /// 渲染 Backstage 全屏面板：左列主题色大按钮（新建/打开/保存/另存为/打印，
+    /// 底部"选项"），右列最近文件列表。Esc / 返回 / 再点"文件"关闭。
+    pub fn render_app_menu(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
+        let ot = office_theme(cx);
+
+        let item =
+            |cx: &mut Context<Self>, key: &'static str, icon: &'static str, label: &'static str, cmd: &'static str| {
+                div()
+                    .id(ElementId::Name(key.into()))
+                    .h(px(34.0))
+                    .w_full()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .px_4()
+                    .text_size(px(12.5))
+                    .text_color(rgba(0xffffff))
+                    .cursor_pointer()
+                    .hover(|s| s.bg(rgba(0xffffff33)))
+                    .active(|s| s.bg(rgba(0xffffff4d)))
+                    .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                        state::run_command(cmd, cx);
+                        this.close_app_menu(cx);
+                    }))                    .child(img(icons::icon(icon)).size(px(15.0)).flex_shrink_0())
+                    .child(label)
+            };
+
+        let recent_row = |cx: &mut Context<Self>, key: String, name: &'static str, meta: &'static str| {
+            div()
+                .id(ElementId::Name(key.into()))
+                .h(px(44.0))
+                .w_full()
+                .flex()
+                .items_center()
+                .gap_2()
+                .px_3()
+                .rounded_sm()
+                .cursor_pointer()
+                .hover(move |s| s.bg(rgba(0x0696d71a)))
+                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                    state::run_command("open", cx);
+                    this.close_app_menu(cx);
+                }))
+                .child(img(icons::icon("ui/doc.svg")).size(px(18.0)).flex_shrink_0())
+                .child(
+                    div()
+                        .text_size(px(12.5))
+                        .text_color(ot.text)
+                        .child(SharedString::from(name)),
+                )
+                .child(div().flex_1())
+                .child(
+                    div()
+                        .text_size(px(10.5))
+                        .text_color(ot.group_name)
+                        .child(SharedString::from(meta)),
+                )
+        };
+
+        div()
+            .id("app-menu")
+            .flex_1()
+            .min_h_0()
+            .flex()
+            .bg(ot.tool_bg)
+            // 左列：主题色按钮区
+            .child(
+                div()
+                    .v_flex()
+                    .w(px(200.0))
+                    .h_full()
+                    .flex_shrink_0()
+                    .bg(ot.accent)
+                    .pt_1p5()
+                    .child(
+                        div()
+                            .id("backstage-back")
+                            .h(px(38.0))
+                            .w_full()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .px_4()
+                            .text_size(px(12.5))
+                            .text_color(rgba(0xffffff))
+                            .cursor_pointer()
+                            .hover(|s| s.bg(rgba(0xffffff33)))
+                            .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
+                                this.close_app_menu(cx);
+                            }))
+                            .child(div().text_size(px(14.0)).child("‹"))
+                            .child("返回"),
+                    )
+                    .child(item(cx, "bs-new", "ui/doc_new.svg", "新建", "new"))
+                    .child(item(cx, "bs-open", "ui/folder_open.svg", "打开", "open"))
+                    .child(item(cx, "bs-save", "ui/save.svg", "保存", "save"))
+                    .child(item(cx, "bs-saveas", "ui/file_export.svg", "另存为", "saveas"))
+                    .child(item(cx, "bs-plot", "ui/print.svg", "打印", "plot"))
+                    .child(div().flex_1())
+                    .child(
+                        div()
+                            .h(px(1.0))
+                            .w_full()
+                            .bg(rgba(0xffffff33))
+                            .mb_1p5(),
+                    )
+                    .child(item(cx, "bs-options", "ui/gear.svg", "选项", "options"))
+                    .pb_2(),
+            )
+            // 右列：最近文件
+            .child(
+                div()
+                    .id("backstage-recent")
+                    .v_flex()
+                    .flex_1()
+                    .h_full()
+                    .overflow_y_scroll()
+                    .pt_3()
+                    .child(
+                        div()
+                            .px_6()
+                            .pb_2()
+                            .text_size(px(15.0))
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(ot.text)
+                            .child("最近"),
+                    )
+                    .px_4()
+                    .children(
+                        RECENT_FILES
+                            .iter()
+                            .enumerate()
+                            .map(|(k, (name, meta))| {
+                                recent_row(cx, format!("recent-{k}"), name, meta)
+                            }),
+                    ),
+            )
+    }
+
+    /// 关闭应用菜单：状态在 CadModel 上，经 AppEvent 通知 Workspace 切回 dock 区。
+    pub fn close_app_menu(&mut self, cx: &mut Context<Self>) {
+        state::set_app_menu_open(false, cx);
+    }
 }
