@@ -250,7 +250,7 @@ impl CadEgui {
                                                     );
                                                 }
                                             }
-                                            Level::Compact => {
+                                            Level::Middle | Level::Compact => {
                                                 for (ii, item) in group.items.iter().enumerate() {
                                                     render_compact(
                                                         ui,

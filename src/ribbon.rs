@@ -262,6 +262,52 @@ impl RibbonBar {
                 }
                 div().flex().flex_row().items_start().h_full().children(items).into_any_element()
             }
+            Level::Middle => {
+                // FR Middle 档：所有工具变 22 高横排按钮，流式换行
+                let mut cells: Vec<AnyElement> = Vec::new();
+                let mut k = 0usize;
+                for item in group.items.iter() {
+                    match item {
+                        RibbonItem::Large { icon, label, cmd } => {
+                            cells.push(middle_tool(
+                                &format!("{key}m{k}"), icon, label, None, cmd, snap, theme,
+                            ).into_any_element());
+                            k += 1;
+                        }
+                        RibbonItem::SplitLarge { dd, icon, label, cmd, menu } => {
+                            cells.push(middle_tool(
+                                &format!("{key}m{k}"), icon, label, Some((dd, menu)), cmd, snap, theme,
+                            ).into_any_element());
+                            k += 1;
+                        }
+                        RibbonItem::Column { tools } => {
+                            for t in tools.iter() {
+                                cells.push(middle_tool(
+                                    &format!("{key}m{k}"), t.icon, t.label, None, t.cmd, snap, theme,
+                                ).into_any_element());
+                                k += 1;
+                            }
+                        }
+                        RibbonItem::SplitColumn { tools } => {
+                            for t in tools.iter() {
+                                cells.push(middle_tool(
+                                    &format!("{key}m{k}"), t.icon, t.label, None, t.cmd, snap, theme,
+                                ).into_any_element());
+                                k += 1;
+                            }
+                        }
+                        other => {
+                            cells.push(self.render_item(&format!("{key}m{k}"), other, snap, filter, ot, theme));
+                            k += 1;
+                        }
+                    }
+                }
+                div()
+                    .flex().flex_row().flex_wrap().gap_x_1().gap_y_0p5()
+                    .items_center()
+                    .children(cells)
+                    .into_any_element()
+            }
             Level::Compact => {
                 let mut cols = Vec::new();
                 for (ii, item) in group.items.iter().enumerate() {
@@ -272,19 +318,23 @@ impl RibbonBar {
             Level::Flyout => flyout_button(&key, group, snap, filter, theme).into_any_element(),
         };
 
-        // 组标题：组名（居中）+ 右下角对话框启动器；扩展组为"标题 ▾"
-        let title: AnyElement = match (group.ext, level) {
-            (Some(ext), Level::Full) => {
-                ext_title_button(&key, group, ext, snap, theme).into_any_element()
+        // 组标题：组名（居中）+ 右下角对话框启动器；扩展组为"标题 ▾"。
+        // Flyout 档不渲染（标题按钮已含组名，避免重复）
+        let title: AnyElement = if level == Level::Flyout {
+            div().h(px(15.0)).into_any_element()
+        } else {
+            match (group.ext, level) {
+                (Some(ext), Level::Full) => {
+                    ext_title_button(&key, group, ext, snap, theme).into_any_element()
+                }
+                _ => div()
+                    .h(px(15.0))
+                    .flex().items_center().justify_center()
+                    .text_size(px(10.0))
+                    .text_color(ot.group_name)
+                    .child(SharedString::from(group.name))
+                    .into_any_element(),
             }
-            _ => div()
-                .h(px(15.0))
-                .flex().items_center().justify_center()
-                .text_size(px(10.0))
-                .when(level == Level::Flyout, |el| el.text_color(ot.accent))
-                .text_color(ot.group_name)
-                .child(SharedString::from(group.name))
-                .into_any_element(),
         };
 
         div()
@@ -695,6 +745,65 @@ fn build_menu(popup: PopupMenu, menu: &'static [MenuEntry], dd: &'static str) ->
         );
     }
     m
+}
+
+/// FR Middle 档按钮：22 高横排（icon 16 + 文字），dd 给定时带行内 ▾。
+fn middle_tool(
+    key: &str,
+    icon: &'static str,
+    label: &str,
+    dd: Option<(&'static str, &'static [MenuEntry])>,
+    cmd: &'static str,
+    snap: &RibbonSnapshot,
+    theme: &Theme,
+) -> AnyElement {
+    let active = snap.is_active(cmd)
+        || dd.is_some_and(|(d, m)| snap.is_active(d) || m.iter().any(|(c, _, _)| snap.is_active(c)));
+    let label = label.replace('\n', "");
+    let caret_id = ElementId::Name(format!("{key}-caret").into());
+
+    let face = attach_tooltip(
+        div()
+            .id(ElementId::Name(key.into()))
+            .h(px(22.0))
+            .flex().items_center()
+            .gap_1()
+            .px_1p5()
+            .rounded_sm()
+            .cursor_pointer()
+            .when(active, |el| el.bg(rgba(0x0696d74d)))
+            .hover(move |s| s.bg(if active { rgba(0x0696d760) } else { rgba(0x0696d726) }))
+            .on_click(move |_, _, cx| state::run_tool(cmd, cx))
+            .child(img(icons::icon(icon)).size(px(16.0)).flex_shrink_0())
+            .child(
+                div()
+                    .text_size(px(11.0))
+                    .text_color(theme.foreground)
+                    .child(SharedString::from(label.clone())),
+            ),
+        tip_text(&label, cmd),
+    );
+
+    match dd {
+        Some((dd, menu)) => div()
+            .h_flex()
+            .child(face)
+            .child(
+                div().w(px(12.0)).h(px(22.0)).child(
+                    Button::new(caret_id)
+                        .ghost()
+                        .w_full()
+                        .h(px(20.0))
+                        .child(
+                            div().w_full().flex().justify_center()
+                                .child(Icon::new(IconName::ChevronDown).size(px(7.0))),
+                        )
+                        .dropdown_menu(move |popup, _, _| build_menu(popup, menu, dd)),
+                ),
+            )
+            .into_any_element(),
+        None => face.into_any_element(),
+    }
 }
 
 /// 带文字标签的小按钮：图标上/文字下（用户准则：所有命令必须有文字标签）。

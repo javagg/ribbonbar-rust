@@ -631,9 +631,11 @@ pub fn tabs() -> &'static Vec<RibbonTab> {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Level {
-    /// 完整面板：大按钮 + 图标列。
+    /// 完整面板：大按钮 + 带标签小按钮行。
     Full,
-    /// 紧凑面板：所有项收成 26px 图标竖列。
+    /// 中间档：所有控件变 22 高横排按钮（icon 16 + 文字），流式换行。
+    Middle,
+    /// 紧凑面板：所有项收成 24px 图标竖列。
     Compact,
     /// 折叠为标题按钮，点击弹出整组内容的飞出面板。
     Flyout,
@@ -711,8 +713,43 @@ pub fn item_count(item: &RibbonItem) -> usize {
     }
 }
 
+/// Middle 档单按钮宽估算：icon 16 + 间隙 + 文字（CJK 10.5/字符，ASCII 6）。
+fn middle_btn_width(label: &str) -> f32 {
+    let text_w: f32 = label
+        .chars()
+        .map(|c| if c.is_ascii() { 6.0 } else { 10.5 })
+        .sum();
+    (16.0 + 4.0 + text_w + 10.0).max(44.0)
+}
+
+/// Middle 档整行宽：每个工具变独立 22 高按钮，横排。
+fn item_width_middle(item: &RibbonItem) -> f32 {
+    const GAP: f32 = 2.0;
+    match item {
+        RibbonItem::Large { label, .. } | RibbonItem::SplitLarge { label, .. } => {
+            middle_btn_width(&label.replace('\n', ""))
+        }
+        RibbonItem::Column { tools } => {
+            tools.iter().map(|t| middle_btn_width(t.label)).sum::<f32>()
+                + (tools.len() as f32 - 1.0) * GAP
+        }
+        RibbonItem::SplitColumn { tools } => {
+            tools.iter().map(|t| middle_btn_width(t.label)).sum::<f32>()
+                + (tools.len() as f32 - 1.0) * GAP
+        }
+        RibbonItem::LayerCombo => 110.0,
+        RibbonItem::LabeledSplit { .. } => 104.0,
+        RibbonItem::PasteGroup { .. } => 96.0,
+        RibbonItem::ComboRow { .. } => 170.0,
+        RibbonItem::CharFlow { .. } => 92.0,
+        RibbonItem::SpinRow { .. } => 150.0,
+        RibbonItem::ActionRow { .. } => 130.0,
+    }
+}
+
 pub struct GroupWidths {
     pub full: f32,
+    pub middle: f32,
     pub compact: f32,
     pub flyout: f32,
 }
@@ -721,8 +758,18 @@ pub fn group_widths(group: &RibbonGroup) -> GroupWidths {
     let n: usize = group.items.iter().map(item_count).sum();
     GroupWidths {
         full: GROUP_PAD + group.items.iter().map(item_width_full).sum::<f32>(),
+        middle: GROUP_PAD + group.items.iter().map(item_width_middle).sum::<f32>(),
         compact: GROUP_PAD + n as f32 * MINI_W,
         flyout: GROUP_PAD + FLYOUT_W,
+    }
+}
+
+fn width_of(level: Level, w: &GroupWidths) -> f32 {
+    match level {
+        Level::Full => w.full,
+        Level::Middle => w.middle,
+        Level::Compact => w.compact,
+        Level::Flyout => w.flyout,
     }
 }
 
@@ -731,18 +778,18 @@ pub fn decide_levels(widths: &[GroupWidths], max_w: f32) -> Vec<Level> {
         levels
             .iter()
             .zip(widths)
-            .map(|(lv, w)| match lv {
-                Level::Full => w.full,
-                Level::Compact => w.compact,
-                Level::Flyout => w.flyout,
-            })
+            .map(|(lv, w)| width_of(*lv, w))
             .sum()
     };
     let mut levels = vec![Level::Full; widths.len()];
-    for degraded in [Level::Compact, Level::Flyout] {
+    for degraded in [Level::Middle, Level::Compact, Level::Flyout] {
         for i in (0..widths.len()).rev() {
             if total(&levels) <= max_w {
                 break;
+            }
+            // 下一档不更窄的组跳过（如堆叠标签小按钮在 Middle 横排反而变宽）
+            if width_of(degraded, &widths[i]) >= width_of(levels[i], &widths[i]) {
+                continue;
             }
             levels[i] = degraded;
         }
