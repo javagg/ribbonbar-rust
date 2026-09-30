@@ -86,15 +86,20 @@ docs/                 截图归档 + office-ribbon-style-notes.md（风格研究
 
 ## 6. 下一步工作（按优先级，用户已认可的方向）
 
-**先保证 gpui 版正常**，egui 版同步放后面。
+**对齐基准已换为 Fluent.Ribbon**（D:\srcs\Fluent.Ribbon 源码研读，
+规格见 `docs/fluent-ribbon-spec.md`，含 P1/P2/P3 对齐清单）。
+**P1 已全部落地**（大按钮 68/两行标签/箭头行内/Middle 档/ScreenTip 富提示/
+Backstage 视觉），接下来：
 
-1. **图标按尺寸栅格化**：规范 16/20/32 多尺寸；当前 64px 纹理缩放到 16px 发虚。
-   `icon_bytes::prepared_at(rel, size)`；小按钮用 16px 专用笔画
-2. **KeyTips**：Alt 唤出字母徽章（文件=F、绘图=D、直线=L…），键盘逐级导航
-3. QAT 定制菜单（增删命令+最小化开关）、可编辑组合框（Input+Popup）、
-   对话框启动器弹真对话框（gpui-component dialog）
-4. egui 版同步以上能力（metrics/数据已在 lib；Office 形态项渲染 + 快捷键，
-   render_item 里 Office 形态分支目前是空臂占位）
+1. **P2 行为对齐**（见 spec §12）：QAT 入标题栏 + DisplayOptions 22×22 下拉
+   （Auto-hide/展开/最小化/布局切换）、上下文标签组移标题栏中央、
+   KeyTip 体系（Alt 唤出 0.7s 延迟/手动键串/逐级导航/Esc 逐级退）、
+   Ctrl+F1 最小化、最小化时点标签弹层、滚轮切标签
+2. **图标按尺寸栅格化**：16/20(24)/32 多尺寸；当前 64px 纹理缩放到 16px 发虚。
+   `icon_bytes::prepared_at(rel, size)`
+3. **P3 扩展**：Simplified 单行模式、InRibbonGallery/Gallery、
+   三态配色迁移 Accent 梯度 + 方角化、禁用灰度
+4. egui 版同步（Level::Middle 已占位用 Compact 渲染；Office 形态/快捷键待补）
 
 ## 7. 踩坑清单（血泪教训，改代码前必读）
 
