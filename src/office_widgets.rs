@@ -330,9 +330,11 @@ pub fn render_spin_row(
 }
 
 /// Office 横排带文字按钮组（右箭头），可禁用。
+/// disabled_tip：禁用按钮的 ScreenTip 原因文案（ribbon 层传入）。
 pub fn render_action_row(
     key: &str,
     items: &'static [cad_demo::ribbon_data::ActionBtn],
+    disabled_tip: &'static str,
     ot: &OfficeTheme,
 ) -> AnyElement {
     div().flex().flex_row().gap_1().children(items.iter().enumerate().map(|(k, a)| {
@@ -348,7 +350,11 @@ pub fn render_action_row(
             .child(SharedString::from(a.label))
             .child(div().text_size(px(6.0)).child("▾"));
         let base = if a.disabled {
-            base.text_color(ot.disabled).opacity(0.8)
+            crate::ribbon::attach_disabled_screentip(
+                base.text_color(ot.disabled).opacity(0.8),
+                a.label,
+                disabled_tip,
+            )
         } else {
             let b = office_btn(base, false, false, ot).text_color(ot.text);
             b.on_click(move |_, _, cx| state::run_command(a.cmd, cx))

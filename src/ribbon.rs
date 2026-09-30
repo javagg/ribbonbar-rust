@@ -21,7 +21,7 @@ use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{ActiveTheme, Icon, IconName, StyledExt};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::{
-    div, img, px, rgba, Anchor, AnyElement, AppContext as _, ClickEvent, Context, ElementId, Entity,
+    div, img, px, rgba, Anchor, AnyElement, App, AppContext as _, ClickEvent, Context, ElementId, Entity,
     FontWeight, IntoElement, InteractiveElement as _, ParentElement, SharedString, Stateful,
     StatefulInteractiveElement as _, Styled, Window,
 };
@@ -423,7 +423,7 @@ impl RibbonBar {
                 crate::office_widgets::render_spin_row(key, items, ot).into_any_element()
             }
             RibbonItem::ActionRow { items } => {
-                crate::office_widgets::render_action_row(key, items, ot).into_any_element()
+                crate::office_widgets::render_action_row(key, items, "该命令在当前上下文不可用（演示：无活动选择集）。", ot).into_any_element()
             }
         }
     }
@@ -527,12 +527,97 @@ fn two_line_label(label: &str, theme: &Theme) -> AnyElement {
         .into_any_element()
 }
 
+/// FR ScreenTip（§10）：205px，粗体标题 + 正文 + 禁用段（宿主禁用时出现）。
+fn screentip_view(
+    title: &str,
+    body: &str,
+    disable_reason: Option<&'static str>,
+    window: &mut gpui_kit::Window,
+    cx: &mut App,
+) -> gpui_kit::AnyView {
+    eprintln!("[screentip] build: {title}");
+    let theme = cx.theme().clone();
+    let title = SharedString::from(title.to_string());
+    let body = SharedString::from(body.to_string());
+    Tooltip::element(move |_, _| {
+        let theme = theme.clone();
+        let title = title.clone();
+        let body = body.clone();
+        div()
+            .w(px(205.0))
+            .v_flex()
+            .text_size(px(11.0))
+            .child(
+                div()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .text_size(px(12.0))
+                    .child(title),
+            )
+            .child(
+                div()
+                    .mt_0p5()
+                    .text_color(theme.muted_foreground)
+                    .child(body),
+            )
+            .when_some(disable_reason, |el, reason| {
+                el.child(div().h(px(2.0)).bg(theme.border).my_1()).child(
+                    div()
+                        .flex().items_start()
+                        .gap_1()
+                        .child(
+                            div()
+                                .text_size(px(11.0))
+                                .text_color(theme.muted_foreground)
+                                .child("⚠"),
+                        )
+                        .child(
+                            div().v_flex()
+                                .child(
+                                    div()
+                                        .font_weight(FontWeight::SEMIBOLD)
+                                        .text_size(px(11.0))
+                                        .child("此命令当前不可用。"),
+                                )
+                                .child(
+                                    div()
+                                        .text_size(px(11.0))
+                                        .text_color(theme.muted_foreground)
+                                        .child(SharedString::from(reason)),
+                                ),
+                        ),
+                )
+            })
+            .into_any_element()
+    })
+    .build(window, cx)
+}
+
+/// 工具按钮富提示：标题=工具名，正文=命令与快捷键。
+fn attach_screentip(el: Stateful<gpui_kit::Div>, title: &str, cmd: &str) -> Stateful<gpui_kit::Div> {
+    let title = title.replace('\n', " ");
+    let body = match shortcut_of(cmd) {
+        Some(k) => format!("命令: {cmd}（快捷键: {k}）"),
+        None => format!("命令: {cmd}"),
+    };
+    el.tooltip(move |window, cx| screentip_view(&title, &body, None, window, cx))
+}
+
+/// 禁用按钮富提示：带禁用原因段。
+pub fn attach_disabled_screentip(
+    el: Stateful<gpui_kit::Div>,
+    title: &str,
+    reason: &'static str,
+) -> Stateful<gpui_kit::Div> {
+    let title = title.replace('\n', " ");
+    el.tooltip(move |window, cx| screentip_view(&title, "", Some(reason), window, cx))
+}
+
 fn attach_tooltip(el: Stateful<gpui_kit::Div>, text: SharedString) -> Stateful<gpui_kit::Div> {
     el.tooltip(move |window, cx| Tooltip::new(text.clone()).build(window, cx))
 }
 
 fn quick_button(id: &str, icon: &'static str, tip: &'static str, cmd: &'static str) -> Stateful<gpui_kit::Div> {
-    attach_tooltip(
+    attach_screentip(
         div()
             .id(ElementId::Name(id.into()))
             .size(px(26.0))
@@ -543,7 +628,8 @@ fn quick_button(id: &str, icon: &'static str, tip: &'static str, cmd: &'static s
             .cursor_pointer()
             .on_click(move |_, _, cx| state::run_command(cmd, cx))
             .child(img(icons::icon(icon)).size(px(17.0)).flex_shrink_0()),
-        tip_text(tip, cmd),
+        tip,
+        cmd,
     )
 }
 
@@ -624,7 +710,7 @@ fn large_tool(
     theme: &Theme,
 ) -> Stateful<gpui_kit::Div> {
     let active = snap.is_active(cmd);
-    attach_tooltip(
+    attach_screentip(
         tool_button_base(key, LARGE_W, LARGE_H, active)
             .flex().flex_col()
             .pt_1()
@@ -640,7 +726,8 @@ fn large_tool(
                     .flex().items_start().justify_center()
                     .child(two_line_label(label, theme)),
             ),
-        tip_text(label, cmd),
+        label,
+        cmd,
     )
 }
 
@@ -671,7 +758,7 @@ fn split_large(
         .hover(move |s| s.bg(if active { rgba(0x0696d760) } else { rgba(0x0696d726) }))
         .child(
             // face 与 large_tool 同构（FR：SplitButton 与 Button 外观一致）
-            attach_tooltip(
+            attach_screentip(
                 div()
                     .id(ElementId::Name(format!("{key}-main").into()))
                     .flex_1()
@@ -709,7 +796,8 @@ fn split_large(
                                     ),
                             ),
                     ),
-                tip_text(face_label, face_cmd),
+                face_label,
+                face_cmd,
             ),
         )
 }
@@ -762,7 +850,7 @@ fn middle_tool(
     let label = label.replace('\n', "");
     let caret_id = ElementId::Name(format!("{key}-caret").into());
 
-    let face = attach_tooltip(
+    let face = attach_screentip(
         div()
             .id(ElementId::Name(key.into()))
             .h(px(22.0))
@@ -781,7 +869,8 @@ fn middle_tool(
                     .text_color(theme.foreground)
                     .child(SharedString::from(label.clone())),
             ),
-        tip_text(&label, cmd),
+        &label,
+        cmd,
     );
 
     match dd {
@@ -816,7 +905,7 @@ fn small_tool(
     theme: &Theme,
 ) -> Stateful<gpui_kit::Div> {
     let active = snap.is_active(cmd);
-    attach_tooltip(
+    attach_screentip(
         tool_button_base(key, STACK_W, STACK_H, active)
             .flex().flex_col()
             .items_center().justify_center()
@@ -831,7 +920,8 @@ fn small_tool(
                     .overflow_hidden()
                     .child(SharedString::from(label)),
             ),
-        tip_text(label, cmd),
+        label,
+        cmd,
     )
 }
 
@@ -850,7 +940,6 @@ fn split_small(key: &str, t: &SmallSplit, snap: &RibbonSnapshot, theme: &Theme) 
         None => (icon_field, t.label, dd),
     };
     let active = snap.is_active(dd) || t.menu.iter().any(|(c, _, _)| snap.is_active(c));
-    let tip = tip_text(face_label, face_cmd);
 
     let el = div()
         .id(ElementId::Name(key.into()))
@@ -896,7 +985,7 @@ fn split_small(key: &str, t: &SmallSplit, snap: &RibbonSnapshot, theme: &Theme) 
             .overflow_hidden()
             .child(SharedString::from(face_label)),
     );
-    attach_tooltip(el, tip)
+    attach_screentip(el, face_label, face_cmd)
 }
 
 fn labeled_split(
@@ -934,7 +1023,7 @@ fn labeled_split(
                 .child(img(icons::icon(face_icon)).size(px(14.0)).flex_shrink_0()),
         )
         .child(
-            attach_tooltip(
+            attach_screentip(
                 div()
                     .id(ElementId::Name(format!("{key}-label").into()))
                     .flex_1()
@@ -943,7 +1032,8 @@ fn labeled_split(
                     .text_color(theme.foreground)
                     .on_click(move |_, _, cx| state::run_tool(face_cmd, cx))
                     .child(SharedString::from(face_label)),
-                tip_text(face_label, face_cmd),
+                face_label,
+                face_cmd,
             ),
         )
         .child(
@@ -1278,7 +1368,7 @@ fn ext_panel(ext: &'static [ExtTool], snap: &RibbonSnapshot, theme: &Theme) -> A
             .items_center()
             .gap_0p5()
             .child(
-                attach_tooltip(
+                attach_screentip(
                     div()
                         .id(ElementId::Name(format!("ext-{k}").into()))
                         .size(px(26.0))
@@ -1289,7 +1379,8 @@ fn ext_panel(ext: &'static [ExtTool], snap: &RibbonSnapshot, theme: &Theme) -> A
                         .hover(|s| s.bg(rgba(0x0696d726)))
                         .on_click(move |_, _, cx| state::run_tool(t.cmd, cx))
                         .child(img(icons::icon(t.icon)).size(px(16.0)).flex_shrink_0()),
-                    tip_text(t.label, t.cmd),
+                    t.label,
+                    t.cmd,
                 ),
             )
             .when(!t.options.is_empty(), |el| {
@@ -1517,7 +1608,7 @@ fn flyout_panel(
                     .into_any_element()
             }
             RibbonItem::ActionRow { items } => {
-                crate::office_widgets::render_action_row(&format!("fly{k}a"), items, &ot())
+                crate::office_widgets::render_action_row(&format!("fly{k}a"), items, "该命令在当前上下文不可用（演示：无活动选择集）。", &ot())
                     .into_any_element()
             }
         };
