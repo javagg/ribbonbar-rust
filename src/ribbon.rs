@@ -21,7 +21,7 @@ use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{ActiveTheme, Icon, IconName, StyledExt};
 use gpui_kit::prelude::FluentBuilder;
 use gpui_kit::{
-    div, img, px, rgba, Anchor, AnyElement, App, AppContext as _, ClickEvent, Context, ElementId, Entity,
+    div, img, px, rgba, rgb, Anchor, AnyElement, App, AppContext as _, ClickEvent, Context, ElementId, Entity,
     FontWeight, IntoElement, InteractiveElement as _, ParentElement, SharedString, Stateful,
     StatefulInteractiveElement as _, Styled, Window,
 };
@@ -1642,28 +1642,52 @@ impl RibbonBar {
     /// 底部"选项"），右列最近文件列表。Esc / 返回 / 再点"文件"关闭。
     pub fn render_app_menu(&mut self, cx: &mut Context<Self>) -> impl IntoElement {
         let ot = office_theme(cx);
+        let theme = cx.theme().clone();
+        // FR：左列浅灰（暗色主题 #2C2C2C）、右列窗口底色；选中项左侧 4px 竖条
+        let rail_bg = rgb(0x2c2c2c);
+        let hover_bg = rgb(0x3d3d3d);
+        let sel_bar = ot.accent;
 
-        let item =
-            |cx: &mut Context<Self>, key: &'static str, icon: &'static str, label: &'static str, cmd: &'static str| {
-                div()
-                    .id(ElementId::Name(key.into()))
-                    .h(px(34.0))
-                    .w_full()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .px_4()
-                    .text_size(px(12.5))
-                    .text_color(rgba(0xffffff))
-                    .cursor_pointer()
-                    .hover(|s| s.bg(rgba(0xffffff33)))
-                    .active(|s| s.bg(rgba(0xffffff4d)))
-                    .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-                        state::run_command(cmd, cx);
-                        this.close_app_menu(cx);
-                    }))                    .child(img(icons::icon(icon)).size(px(15.0)).flex_shrink_0())
-                    .child(label)
-            };
+        let item = |cx: &mut Context<Self>,
+                    key: &'static str,
+                    icon: &'static str,
+                    label: &'static str,
+                    cmd: &'static str,
+                    selected: bool| {
+            div()
+                .id(ElementId::Name(key.into()))
+                .relative()
+                .h(px(38.0))
+                .w_full()
+                .flex()
+                .items_center()
+                .pl(px(25.0))
+                .pr(px(15.0))
+                .gap_2()
+                .text_size(px(12.5))
+                .text_color(ot.text)
+                .cursor_pointer()
+                .hover(move |s| s.bg(hover_bg))
+                .active(move |s| s.bg(hover_bg))
+                // FR BackstageTabItem 选中：左侧 4px 竖条（AccentBase）
+                .when(selected, |el| {
+                    el.child(
+                        div()
+                            .absolute()
+                            .left_0()
+                            .top(px(8.0))
+                            .bottom(px(8.0))
+                            .w(px(4.0))
+                            .bg(sel_bar),
+                    )
+                })
+                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                    state::run_command(cmd, cx);
+                    this.close_app_menu(cx);
+                }))
+                .child(img(icons::icon(icon)).size(px(14.0)).flex_shrink_0())
+                .child(label)
+        };
 
         let recent_row = |cx: &mut Context<Self>, key: String, name: &'static str, meta: &'static str| {
             div()
@@ -1685,7 +1709,7 @@ impl RibbonBar {
                 .child(
                     div()
                         .text_size(px(12.5))
-                        .text_color(ot.text)
+                        .text_color(theme.foreground)
                         .child(SharedString::from(name)),
                 )
                 .child(div().flex_1())
@@ -1702,52 +1726,52 @@ impl RibbonBar {
             .flex_1()
             .min_h_0()
             .flex()
-            .bg(ot.tool_bg)
-            // 左列：主题色按钮区
+            .bg(theme.background)
+            // 左列：FR Backstage rail（浅灰，暗色 #2C2C2C）
             .child(
                 div()
                     .v_flex()
-                    .w(px(200.0))
+                    .w(px(125.0))
                     .h_full()
                     .flex_shrink_0()
-                    .bg(ot.accent)
-                    .pt_1p5()
+                    .bg(rail_bg)
+                    // 返回按钮：48 高，34×34 椭圆 + 左箭头（FR BackButton）
                     .child(
                         div()
                             .id("backstage-back")
-                            .h(px(38.0))
+                            .h(px(48.0))
                             .w_full()
                             .flex()
                             .items_center()
-                            .gap_2()
-                            .px_4()
-                            .text_size(px(12.5))
-                            .text_color(rgba(0xffffff))
+                            .justify_center()
                             .cursor_pointer()
-                            .hover(|s| s.bg(rgba(0xffffff33)))
+                            .hover(|s| s.bg(hover_bg))
                             .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
                                 this.close_app_menu(cx);
                             }))
-                            .child(div().text_size(px(14.0)).child("‹"))
-                            .child("返回"),
+                            .child(
+                                div()
+                                    .size(px(34.0))
+                                    .rounded_full()
+                                    .bg(ot.accent)
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .text_color(rgba(0xffffff))
+                                    .text_size(px(16.0))
+                                    .child("‹"),
+                            ),
                     )
-                    .child(item(cx, "bs-new", "ui/doc_new.svg", "新建", "new"))
-                    .child(item(cx, "bs-open", "ui/folder_open.svg", "打开", "open"))
-                    .child(item(cx, "bs-save", "ui/save.svg", "保存", "save"))
-                    .child(item(cx, "bs-saveas", "ui/file_export.svg", "另存为", "saveas"))
-                    .child(item(cx, "bs-plot", "ui/print.svg", "打印", "plot"))
+                    .child(item(cx, "bs-new", "ui/doc_new.svg", "新建", "new", true))
+                    .child(item(cx, "bs-open", "ui/folder_open.svg", "打开", "open", false))
+                    .child(item(cx, "bs-save", "ui/save.svg", "保存", "save", false))
+                    .child(item(cx, "bs-saveas", "ui/file_export.svg", "另存为", "saveas", false))
+                    .child(item(cx, "bs-plot", "ui/print.svg", "打印", "plot", false))
                     .child(div().flex_1())
-                    .child(
-                        div()
-                            .h(px(1.0))
-                            .w_full()
-                            .bg(rgba(0xffffff33))
-                            .mb_1p5(),
-                    )
-                    .child(item(cx, "bs-options", "ui/gear.svg", "选项", "options"))
+                    .child(item(cx, "bs-options", "ui/gear.svg", "选项", "options", false))
                     .pb_2(),
             )
-            // 右列：最近文件
+            // 右列：最近文件（标题 + 行，与 FR 内容区同底色）
             .child(
                 div()
                     .id("backstage-recent")
@@ -1762,7 +1786,7 @@ impl RibbonBar {
                             .pb_2()
                             .text_size(px(15.0))
                             .font_weight(FontWeight::SEMIBOLD)
-                            .text_color(ot.text)
+                            .text_color(theme.foreground)
                             .child("最近"),
                     )
                     .px_4()
