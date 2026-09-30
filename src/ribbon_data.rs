@@ -113,6 +113,8 @@ pub struct RibbonGroup {
     pub items: Vec<RibbonItem>,
     /// 组标题扩展面板（None = 标题不可点）。
     pub ext: Option<&'static [ExtTool]>,
+    /// 对话框启动器（FR IsLauncherVisible 默认 false，按组显式启用）。
+    pub launcher: bool,
 }
 
 pub struct RibbonTab {
@@ -152,6 +154,7 @@ pub fn tabs() -> &'static Vec<RibbonTab> {
                     RibbonGroup {
                         name: "剪贴板",
                         ext: None,
+                        launcher: false,
                         items: vec![
                             RibbonItem::PasteGroup {
                                 icon: "paste.svg",
@@ -167,6 +170,7 @@ pub fn tabs() -> &'static Vec<RibbonTab> {
                     RibbonGroup {
                         name: "文字",
                         ext: None,
+                        launcher: true,
                         items: vec![
                             RibbonItem::ComboRow {
                                 items: &[
@@ -187,6 +191,7 @@ pub fn tabs() -> &'static Vec<RibbonTab> {
                     RibbonGroup {
                         name: "栅格",
                         ext: None,
+                        launcher: false,
                         items: vec![
                             RibbonItem::SpinRow {
                                 items: &[
@@ -199,6 +204,7 @@ pub fn tabs() -> &'static Vec<RibbonTab> {
                     RibbonGroup {
                         name: "绘图",
                         ext: Some(DRAW_EXT),
+                        launcher: false,
                         items: vec![
                             RibbonItem::Large { icon: "line.svg", label: "直线", cmd: "line" },
                             RibbonItem::Large { icon: "polyline.svg", label: "多段线", cmd: "pline" },
@@ -278,6 +284,7 @@ pub fn tabs() -> &'static Vec<RibbonTab> {
                     RibbonGroup {
                         name: "修改",
                         ext: Some(MODIFY_EXT),
+                        launcher: false,
                         items: vec![
                             RibbonItem::Large { icon: "move.svg", label: "移动", cmd: "move" },
                             RibbonItem::Large { icon: "copy_clip.svg", label: "复制", cmd: "copy" },
@@ -337,6 +344,7 @@ pub fn tabs() -> &'static Vec<RibbonTab> {
                     RibbonGroup {
                         name: "注释",
                         ext: None,
+                        launcher: false,
                         items: vec![
                             RibbonItem::Large { icon: "mtext.svg", label: "多行文字", cmd: "mtext" },
                             RibbonItem::Large { icon: "text.svg", label: "单行文字", cmd: "text" },
@@ -375,6 +383,7 @@ pub fn tabs() -> &'static Vec<RibbonTab> {
                     RibbonGroup {
                         name: "图层",
                         ext: None,
+                        launcher: false,
                         items: vec![
                             RibbonItem::Large { icon: "layers/panel.svg", label: "图层特性", cmd: "layer" },
                             RibbonItem::LayerCombo,
@@ -393,6 +402,7 @@ pub fn tabs() -> &'static Vec<RibbonTab> {
                     RibbonGroup {
                         name: "块",
                         ext: None,
+                        launcher: false,
                         items: vec![
                             RibbonItem::Large { icon: "blocks/block.svg", label: "创建块", cmd: "block" },
                             RibbonItem::Large { icon: "blocks/insert.svg", label: "插入块", cmd: "insert" },
@@ -406,6 +416,7 @@ pub fn tabs() -> &'static Vec<RibbonTab> {
                     RibbonGroup {
                         name: "几何约束",
                         ext: None,
+                        launcher: false,
                         items: vec![
                             RibbonItem::Large { icon: "constrain/auto.svg", label: "自动约束", cmd: "auto_constrain" },
                             RibbonItem::Column {
@@ -448,6 +459,7 @@ pub fn tabs() -> &'static Vec<RibbonTab> {
                     RibbonGroup {
                         name: "标注约束",
                         ext: None,
+                        launcher: false,
                         items: vec![
                             RibbonItem::Large { icon: "constrain/distance.svg", label: "线性", cmd: "dimconstraint_linear" },
                             RibbonItem::Large { icon: "constrain/distance_x.svg", label: "水平", cmd: "dimconstraint_x" },
@@ -463,6 +475,7 @@ pub fn tabs() -> &'static Vec<RibbonTab> {
                     RibbonGroup {
                         name: "管理",
                         ext: None,
+                        launcher: false,
                         items: vec![
                             RibbonItem::Large { icon: "constrain/delete.svg", label: "删除约束", cmd: "delconstraint" },
                             RibbonItem::Large { icon: "constrain/parameters.svg", label: "参数管理器", cmd: "parameters" },
@@ -476,6 +489,7 @@ pub fn tabs() -> &'static Vec<RibbonTab> {
                     RibbonGroup {
                         name: "创建",
                         ext: None,
+                        launcher: false,
                         items: vec![
                             RibbonItem::SplitLarge {
                                 dd: "solid3d",
@@ -501,6 +515,7 @@ pub fn tabs() -> &'static Vec<RibbonTab> {
                     RibbonGroup {
                         name: "布尔运算",
                         ext: None,
+                        launcher: false,
                         items: vec![
                             RibbonItem::Large { icon: "union.svg", label: "并集", cmd: "union" },
                             RibbonItem::Large { icon: "subtract.svg", label: "差集", cmd: "subtract" },
@@ -510,6 +525,7 @@ pub fn tabs() -> &'static Vec<RibbonTab> {
                     RibbonGroup {
                         name: "边",
                         ext: None,
+                        launcher: false,
                         items: vec![
                             RibbonItem::Large { icon: "model/fillet.svg", label: "圆角边", cmd: "fillet_edge" },
                             RibbonItem::Large { icon: "model/chamfer.svg", label: "倒角边", cmd: "chamfer_edge" },
@@ -524,6 +540,7 @@ pub fn tabs() -> &'static Vec<RibbonTab> {
                     RibbonGroup {
                         name: "导航",
                         ext: None,
+                        launcher: false,
                         items: vec![
                             RibbonItem::Large { icon: "zoom_ext.svg", label: "范围缩放", cmd: "zoom_extents" },
                             RibbonItem::Column {
@@ -534,12 +551,13 @@ pub fn tabs() -> &'static Vec<RibbonTab> {
                                 ],
                             },
                             RibbonItem::Large { icon: "pan.svg", label: "平移", cmd: "pan" },
-                            RibbonItem::Large { icon: "orbit.svg", label: "受约束的动态观察", cmd: "orbit" },
+                            RibbonItem::Large { icon: "orbit.svg", label: "受约束的\n动态观察", cmd: "orbit" },
                         ],
                     },
                     RibbonGroup {
                         name: "预设视图",
                         ext: None,
+                        launcher: false,
                         items: vec![
                             RibbonItem::Large { icon: "view_top.svg", label: "俯视", cmd: "view_top" },
                             RibbonItem::Large { icon: "view_front.svg", label: "前视", cmd: "view_front" },
@@ -550,6 +568,7 @@ pub fn tabs() -> &'static Vec<RibbonTab> {
                     RibbonGroup {
                         name: "视觉样式",
                         ext: None,
+                        launcher: false,
                         items: vec![RibbonItem::SplitLarge {
                             dd: "visualstyle",
                             icon: "wireframe.svg",
@@ -566,6 +585,7 @@ pub fn tabs() -> &'static Vec<RibbonTab> {
                     RibbonGroup {
                         name: "界面",
                         ext: None,
+                        launcher: false,
                         items: vec![RibbonItem::Column {
                             tools: &[
                                 Tool { icon: "status/cleanscreen.svg", label: "全屏显示", cmd: "cleanscreen" },
@@ -582,15 +602,17 @@ pub fn tabs() -> &'static Vec<RibbonTab> {
                     RibbonGroup {
                         name: "清理",
                         ext: None,
+                        launcher: false,
                         items: vec![
                             RibbonItem::Large { icon: "purge.svg", label: "清理", cmd: "purge" },
-                            RibbonItem::Large { icon: "overkill.svg", label: "删除重复对象", cmd: "overkill" },
+                            RibbonItem::Large { icon: "overkill.svg", label: "删除重复\n对象", cmd: "overkill" },
                             RibbonItem::Large { icon: "audit.svg", label: "核查", cmd: "audit" },
                         ],
                     },
                     RibbonGroup {
                         name: "应用程序",
                         ext: None,
+                        launcher: false,
                         items: vec![
                             RibbonItem::Large { icon: "ui/gear.svg", label: "选项", cmd: "options" },
                             RibbonItem::Large { icon: "plot.svg", label: "打印", cmd: "plot" },
@@ -619,7 +641,7 @@ pub enum Level {
 
 pub const LARGE_W: f32 = 60.0;
 pub const LARGE_H: f32 = 68.0;
-pub const MINI_W: f32 = 26.0;
+pub const MINI_W: f32 = 24.0;
 pub const GROUP_PAD: f32 = 26.0;
 pub const FLYOUT_W: f32 = 58.0;
 
@@ -738,17 +760,17 @@ pub mod metrics {
     /// 组名行高。
     pub const GROUP_LABEL_H: f32 = 16.0;
     /// 大按钮宽。
-    pub const LARGE_W: f32 = 56.0;
+    pub const LARGE_W: f32 = 60.0;
     /// 大按钮高。
-    pub const LARGE_H: f32 = 62.0;
+    pub const LARGE_H: f32 = 68.0;
     /// 大按钮图标。
-    pub const LARGE_ICON: f32 = 30.0;
+    pub const LARGE_ICON: f32 = 32.0;
     /// 横排小按钮高。
     pub const SMALL_H: f32 = 22.0;
     /// 小图标尺寸。
     pub const SMALL_ICON: f32 = 16.0;
     /// 图标列宽。
-    pub const MINI_W: f32 = 26.0;
+    pub const MINI_W: f32 = 24.0;
     /// 组合框高。
     pub const COMBO_H: f32 = 20.0;
     /// 组水平内边距。

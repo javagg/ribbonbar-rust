@@ -273,7 +273,6 @@ impl RibbonBar {
         };
 
         // 组标题：组名（居中）+ 右下角对话框启动器；扩展组为"标题 ▾"
-        let has_ext = group.ext.is_some();
         let title: AnyElement = match (group.ext, level) {
             (Some(ext), Level::Full) => {
                 ext_title_button(&key, group, ext, snap, theme).into_any_element()
@@ -302,8 +301,8 @@ impl RibbonBar {
                     .child(
                         div().flex_1().child(title),
                     )
-                    .when(has_ext && level == Level::Full, |el| {
-                        // 对话框启动器（ Office 风格组角标）
+                    .when(group.launcher && level == Level::Full, |el| {
+                        // 对话框启动器（FR IsLauncherVisible 默认 false，按组启用）
                         el.child(
                             div()
                                 .id(ElementId::Name(format!("{key}-launcher").into()))
@@ -452,10 +451,30 @@ fn ot() -> OfficeTheme {
 }
 
 fn tip_text(label: &str, cmd: &str) -> SharedString {
+    // 两行标签（\n）在 tooltip 里折叠为空格
+    let label = label.replace('\n', " ");
     match shortcut_of(cmd) {
         Some(key) => SharedString::from(format!("{label}\n命令: {cmd}\n快捷键: {key}")),
         None => SharedString::from(format!("{label}\n命令: {cmd}")),
     }
+}
+
+/// TwoLineLabel（FR 规范）：Large 态标签最多两行，按 \n 拆行上下叠放。
+fn two_line_label(label: &str, theme: &Theme) -> AnyElement {
+    let (l1, l2) = match label.split_once('\n') {
+        Some((a, b)) => (a, Some(b)),
+        None => (label, None),
+    };
+    div()
+        .flex()
+        .flex_col()
+        .items_center()
+        .text_size(px(10.5))
+        .text_color(theme.foreground)
+        .overflow_hidden()
+        .child(SharedString::from(l1.to_string()))
+        .children(l2.map(|l| SharedString::from(l.to_string())))
+        .into_any_element()
 }
 
 fn attach_tooltip(el: Stateful<gpui_kit::Div>, text: SharedString) -> Stateful<gpui_kit::Div> {
@@ -560,21 +579,17 @@ fn large_tool(
             .flex().flex_col()
             .pt_1()
             .on_click(move |_, _, cx| state::run_tool(cmd, cx))
-            // 与 split_large 的 face 完全同构：图标区/标签行位置一致（微软规范），
-            // 底部 12px 条留空（分裂按钮在该条放 ▾）
+            // FR Large 结构：图标 32 在上，TwoLineLabel 在下（最多两行）
             .child(
-                div().h(px(33.0)).flex().items_center().justify_center()
-                    .child(img(icons::icon(icon)).size(px(30.0))),
+                div().h(px(32.0)).flex().items_center().justify_center()
+                    .child(img(icons::icon(icon)).size(px(32.0))),
             )
             .child(
                 div()
-                    .h(px(13.0))
-                    .flex().justify_center()
-                    .text_size(px(10.5))
-                    .text_color(theme.foreground)
-                    .child(SharedString::from(label)),
-            )
-            .child(div().h(px(12.0))),
+                    .flex_1()
+                    .flex().items_start().justify_center()
+                    .child(two_line_label(label, theme)),
+            ),
         tip_text(label, cmd),
     )
 }
@@ -605,42 +620,46 @@ fn split_large(
         .when(active, |el| el.bg(rgba(0x0696d74d)))
         .hover(move |s| s.bg(if active { rgba(0x0696d760) } else { rgba(0x0696d726) }))
         .child(
-            // face 与 large_tool 同构（4 + 图标区 33 + 标签 13）：
-            // 两类大按钮的图标与文字位置完全一致（微软规范）
+            // face 与 large_tool 同构（FR：SplitButton 与 Button 外观一致）
             attach_tooltip(
                 div()
                     .id(ElementId::Name(format!("{key}-main").into()))
-                    .h(px(LARGE_H - 12.0))
+                    .flex_1()
                     .flex().flex_col()
                     .pt_1()
                     .on_click(move |_, _, cx| state::run_tool(face_cmd, cx))
                     .child(
-                        div().h(px(33.0)).flex().items_center().justify_center()
-                            .child(img(icons::icon(face_icon)).size(px(30.0))),
+                        div().h(px(32.0)).flex().items_center().justify_center()
+                            .child(img(icons::icon(face_icon)).size(px(32.0))),
                     )
                     .child(
+                        // 标签行内右下角下拉箭头（FR：TwoLineLabel HasGlyph），独立点击区
                         div()
-                            .h(px(13.0))
-                            .flex().justify_center()
-                            .text_size(px(10.5))
-                            .text_color(theme.foreground)
-                            .child(SharedString::from(face_label)),
+                            .flex_1()
+                            .w_full()
+                            .flex().items_stretch()
+                            .child(
+                                div().flex_1().flex().items_start().justify_center()
+                                    .child(two_line_label(face_label, theme)),
+                            )
+                            .child(
+                                div()
+                                    .w(px(12.0))
+                                    .flex().items_end().justify_center()
+                                    .child(
+                                        Button::new(caret_id)
+                                            .ghost()
+                                            .w_full()
+                                            .h(px(14.0))
+                                            .child(
+                                                div().w_full().flex().justify_center()
+                                                    .child(Icon::new(IconName::ChevronDown).size(px(8.0))),
+                                            )
+                                            .dropdown_menu(move |popup, _, _| build_menu(popup, menu, dd)),
+                                    ),
+                            ),
                     ),
                 tip_text(face_label, face_cmd),
-            ),
-        )
-        // ▾ 条占满按钮宽度（箭头居中）：菜单贴按钮下方、左缘对齐
-        .child(
-            div().w_full().h(px(12.0)).child(
-                Button::new(caret_id)
-                    .ghost()
-                    .w_full()
-                    .h(px(11.0))
-                    .child(
-                        div().w_full().flex().justify_center()
-                            .child(Icon::new(IconName::ChevronDown).size(px(9.0))),
-                    )
-                    .dropdown_menu(move |popup, _, _| build_menu(popup, menu, dd)),
             ),
         )
 }
