@@ -38,7 +38,8 @@ pub use cad_demo::ribbon_data::*;
 // ---------------------------------------------------------------------------
 
 const TAB_STRIP_H: f32 = 30.0;
-const CONTENT_H: f32 = 82.0;
+// 工具内容区高（FR RibbonTabControl.DefaultContentHeight=100）+ 组名行 16
+const CONTENT_H: f32 = 116.0;
 
 pub struct RibbonBar {
     pub active: usize,
@@ -343,7 +344,18 @@ impl RibbonBar {
             .border_color(ot.group_line)
             .px_2()
             .mx_1()
-            .child(div().flex().flex_row().items_start().h_full().child(body))
+            // 工具区占满固定内容区（FR DefaultContentHeight），溢出裁剪——
+            // 组名行恒定贴底，各组对齐（此前内容撑高导致组名错位被裁）
+            .child(
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_hidden()
+                    .flex()
+                    .flex_row()
+                    .items_start()
+                    .child(body),
+            )
             .child(
                 div()
                     .h_flex()
