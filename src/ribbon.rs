@@ -159,6 +159,7 @@ impl RibbonBar {
         strip = strip.child(
             div()
                 .id("ribbon-file")
+                .relative()
                 .h(px(TAB_STRIP_H - 4.0))
                 .px_3()
                 .flex()
@@ -175,17 +176,20 @@ impl RibbonBar {
                         .hover(|s| s.bg(ot.title_bg))
                 })
                 .child("文件")
+                .when(snap.keytips_active, |el| el.child(keytip_badge("F")))
                 .on_click(move |_, _, cx| {
                     state::set_app_menu_open(!menu_open, cx);
                 }),
         );
 
-        // 标签页：激活 = 白底黑字（点亮工具区）
+        // 标签页：激活 = 白底黑字（点亮工具区）；KeyTip 键串见 TAB_KEYTIPS
         strip = strip.children(tabs.iter().enumerate().map(|(ix, tab)| {
             let active = ix == self.active;
             let name = tab.name;
+            let tab_key = TAB_KEYTIPS.get(ix + 1).map(|(k, _)| *k);
             div()
                 .id(ElementId::Name(format!("tab-{ix}").into()))
+                .relative()
                 .h(px(TAB_STRIP_H - 4.0))
                 .px_3()
                 .flex()
@@ -201,6 +205,9 @@ impl RibbonBar {
                         .hover(move |s| s.bg(ot.title_bg))
                 })
                 .child(name)
+                .when_some(tab_key.filter(|_| snap.keytips_active), |el, k| {
+                    el.child(keytip_badge(k))
+                })
                 .on_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
                     this.active = ix;
                     // FR：双击切换最小化；最小化时单击标签打开临时展开层
@@ -562,6 +569,29 @@ fn ot() -> OfficeTheme {
     crate::office_widgets::ot_cached()
 }
 
+/// KeyTip 徽章（FR：深底白字、随内容宽、宿主右下角）。
+fn keytip_badge(keys: &str) -> AnyElement {
+    div()
+        .absolute()
+        .right(px(1.0))
+        .bottom(px(1.0))
+        .px(px(4.0))
+        .bg(rgb(0x1a1a1a))
+        .text_color(rgb(0xffffff))
+        .text_size(px(9.0))
+        .font_weight(FontWeight::SEMIBOLD)
+        .child(SharedString::from(keys.to_string()))
+        .into_any_element()
+}
+
+/// KeyTip 模式下按钮的键串徽章（无键位则 None）。
+fn maybe_keytip(snap: &RibbonSnapshot, cmd: &str) -> Option<AnyElement> {
+    if !snap.keytips_active {
+        return None;
+    }
+    shortcut_of(cmd).map(keytip_badge)
+}
+
 fn tip_text(label: &str, cmd: &str) -> SharedString {
     // 两行标签（\n）在 tooltip 里折叠为空格
     let label = label.replace('\n', " ");
@@ -774,6 +804,7 @@ fn large_tool(
     let active = snap.is_active(cmd);
     attach_screentip(
         tool_button_base(key, LARGE_W, LARGE_H, active)
+            .relative()
             .flex().flex_col()
             .pt_1()
             .on_click(move |_, _, cx| state::run_tool(cmd, cx))
@@ -787,7 +818,8 @@ fn large_tool(
                     .flex_1()
                     .flex().items_start().justify_center()
                     .child(two_line_label(label, theme)),
-            ),
+            )
+            .children(maybe_keytip(snap, cmd)),
         label,
         cmd,
     )
@@ -811,6 +843,7 @@ fn split_large(
 
     div()
         .id(ElementId::Name(key.into()))
+        .relative()
         .flex().flex_col()
         .w(px(LARGE_W))
         .h(px(LARGE_H))
@@ -818,6 +851,7 @@ fn split_large(
         .cursor_pointer()
         .when(active, |el| el.bg(rgba(0x0696d74d)))
         .hover(move |s| s.bg(if active { rgba(0x0696d760) } else { rgba(0x0696d726) }))
+        .children(maybe_keytip(snap, face_cmd))
         .child(
             // face 与 large_tool 同构（FR：SplitButton 与 Button 外观一致）
             attach_screentip(
@@ -915,6 +949,7 @@ fn middle_tool(
     let face = attach_screentip(
         div()
             .id(ElementId::Name(key.into()))
+            .relative()
             .h(px(22.0))
             .flex().items_center()
             .gap_1()
@@ -930,7 +965,8 @@ fn middle_tool(
                     .text_size(px(11.0))
                     .text_color(theme.foreground)
                     .child(SharedString::from(label.clone())),
-            ),
+            )
+            .children(maybe_keytip(snap, cmd)),
         &label,
         cmd,
     );
@@ -969,6 +1005,7 @@ fn small_tool(
     let active = snap.is_active(cmd);
     attach_screentip(
         tool_button_base(key, STACK_W, STACK_H, active)
+            .relative()
             .flex().flex_col()
             .items_center().justify_center()
             .gap_0p5()
@@ -981,7 +1018,8 @@ fn small_tool(
                     .text_color(theme.foreground)
                     .overflow_hidden()
                     .child(SharedString::from(label)),
-            ),
+            )
+            .children(maybe_keytip(snap, cmd)),
         label,
         cmd,
     )

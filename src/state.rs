@@ -73,6 +73,14 @@ pub fn ribbon_click(cx: &mut App) {
     });
 }
 
+pub fn set_keytips_active(active: bool, cx: &mut App) {
+    let Some(entity) = app_state(cx) else { return };
+    entity.update(cx, |state, cx| {
+        state.model.set_keytips_active(active);
+        cx.emit(AppEvent::Updated);
+    });
+}
+
 pub fn select_dropdown(dd: &'static str, cmd: &'static str, cx: &mut App) {
     let Some(entity) = app_state(cx) else { return };
     entity.update(cx, |state, cx| {

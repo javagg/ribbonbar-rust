@@ -41,6 +41,8 @@ pub struct RibbonSnapshot {
     pub ribbon_minimized: bool,
     /// 最小化时点标签的临时展开层（点外部收回）。
     pub ribbon_transient_open: bool,
+    /// KeyTip 模式（Alt/F10 唤出）。
+    pub keytips_active: bool,
 }
 
 impl RibbonSnapshot {
@@ -100,6 +102,8 @@ pub struct CadModel {
     pub ribbon_minimized: bool,
     /// 最小化时点标签的临时展开层。
     pub ribbon_transient_open: bool,
+    /// KeyTip 模式（Alt/F10 唤出，显示键串徽章，字符键直达）。
+    pub keytips_active: bool,
 }
 
 fn push_undo(s: &mut CadModel, cmd: &str) {
@@ -153,6 +157,7 @@ impl CadModel {
             app_menu_open: self.app_menu_open,
             ribbon_minimized: self.ribbon_minimized,
             ribbon_transient_open: self.ribbon_transient_open,
+            keytips_active: self.keytips_active,
         }
     }
 
@@ -307,5 +312,10 @@ impl CadModel {
     /// 点击功能区内任意工具/标签（收最小化临时层的锚点之一）。
     pub fn ribbon_click(&mut self) {
         self.ribbon_transient_open = false;
+    }
+
+    /// KeyTip 模式开关。
+    pub fn set_keytips_active(&mut self, active: bool) {
+        self.keytips_active = active;
     }
 }

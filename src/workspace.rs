@@ -12,7 +12,7 @@ use gpui_kit::{
 };
 
 use crate::icons;
-use crate::keys::{CloseAppMenu, ToggleRibbonMinimize, ToolAction};
+use crate::keys::{self, CloseAppMenu, ToggleRibbonMinimize, ToolAction};
 use crate::office_widgets::office_theme;
 use crate::ribbon::RibbonBar;
 use crate::state::{self, AppEvent};
@@ -249,15 +249,42 @@ impl Render for Workspace {
             .bg(ot.tool_bg)
             .text_color(ot.text)
             .on_action(cx.listener(|this, action: &ToolAction, window, cx| {
-                this.on_tool_key(action, window, cx)
+                this.on_tool_key(action, window, cx);
+                // KeyTip 会话中按工具键 → 直达并退出会话（FR Forward click）
+                if state::ribbon_snapshot(cx).keytips_active {
+                    state::set_keytips_active(false, cx);
+                }
             }))
             .on_action(cx.listener(|this, _: &CloseAppMenu, _, cx| {
                 this.ribbon.update(cx, |r, cx| r.close_app_menu(cx));
+                // Esc 兼职退出 KeyTip 会话（FR Back/Terminate）
+                if state::ribbon_snapshot(cx).keytips_active {
+                    state::set_keytips_active(false, cx);
+                }
             }))
             .on_action(cx.listener(|this, _: &ToggleRibbonMinimize, _, cx| {
                 let minimized = state::ribbon_snapshot(cx).ribbon_minimized;
                 state::set_ribbon_minimized(!minimized, cx);
                 let _ = this;
+            }))
+            .on_action(cx.listener(|this, _: &keys::ShowKeyTips, _, cx| {
+                // 再按 Alt 终止会话（FR Terminate）
+                let active = state::ribbon_snapshot(cx).keytips_active;
+                state::set_keytips_active(!active, cx);
+                let _ = this;
+            }))
+            .on_action(cx.listener(|this, action: &keys::SwitchTab, _, cx| {
+                // 标签键只在 KeyTip 会话中生效（键位避开工具键，仍双保险）
+                if state::ribbon_snapshot(cx).keytips_active {
+                    this.ribbon.update(cx, |r, _| {
+                        r.active = action.0;
+                    });
+                    // KeyTip 激活时最小化态切标签即临时展开，随后退出会话
+                    if state::ribbon_snapshot(cx).ribbon_minimized {
+                        state::set_ribbon_transient_open(true, cx);
+                    }
+                    state::set_keytips_active(false, cx);
+                }
             }))
             .child(ribbon_el)
             .child(body)
