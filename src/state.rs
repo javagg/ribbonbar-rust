@@ -62,6 +62,16 @@ forward!(set_cursor(pos: Option<(f64, f64)>) set_cursor);
 forward!(set_ext_sub(sub: Option<String>) set_ext_sub);
 forward!(set_ext_open(key: Option<String>) set_ext_open);
 forward!(set_app_menu_open(open: bool) set_app_menu_open);
+forward!(set_ribbon_minimized(minimized: bool) set_ribbon_minimized);
+forward!(set_ribbon_transient_open(open: bool) set_ribbon_transient_open);
+
+pub fn ribbon_click(cx: &mut App) {
+    let Some(entity) = app_state(cx) else { return };
+    entity.update(cx, |state, cx| {
+        state.model.ribbon_click();
+        cx.emit(AppEvent::Updated);
+    });
+}
 
 pub fn select_dropdown(dd: &'static str, cmd: &'static str, cx: &mut App) {
     let Some(entity) = app_state(cx) else { return };

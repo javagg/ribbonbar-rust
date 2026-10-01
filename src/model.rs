@@ -37,6 +37,10 @@ pub struct RibbonSnapshot {
     pub ext_sub: Option<String>,
     pub ext_open: Option<String>,
     pub app_menu_open: bool,
+    /// 功能区最小化（FR IsMinimized，DisplayOptions/双击/Ctrl+F1 切换）。
+    pub ribbon_minimized: bool,
+    /// 最小化时点标签的临时展开层（点外部收回）。
+    pub ribbon_transient_open: bool,
 }
 
 impl RibbonSnapshot {
@@ -92,6 +96,10 @@ pub struct CadModel {
     pub ext_open: Option<String>,
     /// 应用按钮菜单（Backstage 全屏面板）是否展开。
     pub app_menu_open: bool,
+    /// 功能区最小化（FR IsMinimized）。
+    pub ribbon_minimized: bool,
+    /// 最小化时点标签的临时展开层。
+    pub ribbon_transient_open: bool,
 }
 
 fn push_undo(s: &mut CadModel, cmd: &str) {
@@ -143,6 +151,8 @@ impl CadModel {
             ext_sub: self.ext_sub.clone(),
             ext_open: self.ext_open.clone(),
             app_menu_open: self.app_menu_open,
+            ribbon_minimized: self.ribbon_minimized,
+            ribbon_transient_open: self.ribbon_transient_open,
         }
     }
 
@@ -279,5 +289,23 @@ impl CadModel {
     /// 展开/关闭应用按钮菜单（Backstage）。
     pub fn set_app_menu_open(&mut self, open: bool) {
         self.app_menu_open = open;
+    }
+
+    /// 切换功能区最小化（展开时清临时层）。
+    pub fn set_ribbon_minimized(&mut self, minimized: bool) {
+        self.ribbon_minimized = minimized;
+        if minimized {
+            self.ribbon_transient_open = false;
+        }
+    }
+
+    /// 最小化时点标签的临时展开层。
+    pub fn set_ribbon_transient_open(&mut self, open: bool) {
+        self.ribbon_transient_open = open;
+    }
+
+    /// 点击功能区内任意工具/标签（收最小化临时层的锚点之一）。
+    pub fn ribbon_click(&mut self) {
+        self.ribbon_transient_open = false;
     }
 }

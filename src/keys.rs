@@ -13,7 +13,7 @@ use cad_demo::ribbon_data::TOOL_KEYS;
 #[action(namespace = cad, no_json)]
 pub struct ToolAction(pub &'static str);
 
-actions!(cad, [CloseAppMenu]);
+actions!(cad, [CloseAppMenu, ToggleRibbonMinimize]);
 
 /// 启动时把键位表绑到窗口（App 级 keymap）。
 pub fn bind(cx: &mut App) {
@@ -21,4 +21,5 @@ pub fn bind(cx: &mut App) {
         KeyBinding::new(&key.to_lowercase(), ToolAction(cmd), None)
     }));
     cx.bind_keys([KeyBinding::new("escape", CloseAppMenu, None)]);
+    cx.bind_keys([KeyBinding::new("ctrl-f1", ToggleRibbonMinimize, None)]);
 }

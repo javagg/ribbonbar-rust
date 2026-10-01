@@ -43,7 +43,6 @@ const CONTENT_H: f32 = 116.0;
 
 pub struct RibbonBar {
     pub active: usize,
-    pub collapsed: bool,
     row_width: f32,
     /// 图层下拉的搜索框（复用实体，内容闭包里读它的 value 做过滤）。
     layer_filter: Entity<InputState>,
@@ -59,7 +58,7 @@ impl RibbonBar {
         .detach();
         // 首帧即用视口宽度决定降级档位（prepaint 阶段的 notify 不可靠）
         let viewport_w = window.viewport_size().width.as_f32();
-        Self { active: 0, collapsed: false, row_width: viewport_w, layer_filter }
+        Self { active: 0, row_width: viewport_w, layer_filter }
     }
 
     pub fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -70,7 +69,9 @@ impl RibbonBar {
 
         let strip = self.render_tab_strip(window, cx, &snap);
         // Backstage 展开时工具区一并隐藏（Office 行为：只留标签行 + 全屏面板）
-        let content = (!self.collapsed && !snap.app_menu_open).then(|| {
+        // 最小化（FR IsMinimized）时仅显示临时展开层（点标签打开、点外部收回）
+        let expanded = !snap.ribbon_minimized || snap.ribbon_transient_open;
+        let content = (expanded && !snap.app_menu_open).then(|| {
             let tabs = tabs();
             let tab = &tabs[self.active.min(tabs.len() - 1)];
 
@@ -202,9 +203,14 @@ impl RibbonBar {
                 .child(name)
                 .on_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
                     this.active = ix;
-                    // Office 经典行为：双击标签折叠/展开功能区
+                    // FR：双击切换最小化；最小化时单击标签打开临时展开层
                     if event.click_count() >= 2 {
-                        this.collapsed = !this.collapsed;
+                        let minimized = state::ribbon_snapshot(cx).ribbon_minimized;
+                        state::set_ribbon_minimized(!minimized, cx);
+                    } else if state::ribbon_snapshot(cx).ribbon_minimized {
+                        state::set_ribbon_transient_open(true, cx);
+                    } else {
+                        state::ribbon_click(cx);
                     }
                     cx.notify();
                 }))
@@ -237,6 +243,50 @@ impl RibbonBar {
         });
 
         strip = strip.child(div().flex_1());
+
+        // DisplayOptions 按钮（FR 22×22，右上角）：展开/最小化功能区
+        let minimized = snap.ribbon_minimized;
+        strip = strip.child(
+            Button::new("ribbon-display-options")
+                .ghost()
+                .size(px(22.0))
+                .mr_1()
+                .child("?")
+                .tooltip("功能区显示选项")
+                .dropdown_menu(move |popup, _, _| {
+                    popup
+                        .item(
+                            PopupMenuItem::new("展开功能区")
+                                .checked(!minimized)
+                                .on_click(|_, _, cx| {
+                                    state::set_ribbon_minimized(false, cx);
+                                }),
+                        )
+                        .item(
+                            PopupMenuItem::new("最小化功能区")
+                                .checked(minimized)
+                                .on_click(|_, _, cx| {
+                                    state::set_ribbon_minimized(true, cx);
+                                }),
+                        )
+                }),
+        );
+
+        // 滚轮切标签（FR IsMouseWheelScrollingEnabled）
+        let wheel_tabs = tabs.len();
+        let active_ix = self.active;
+        strip = strip.on_scroll_wheel(cx.listener(move |this, event: &gpui_kit::ScrollWheelEvent, _, cx| {
+            let dy = event.delta.pixel_delta(px(20.0)).y.as_f32();
+            if dy.abs() < f32::EPSILON {
+                return;
+            }
+            let dir = if dy > 0.0 { -1 } else { 1 };
+            let next = (active_ix as isize + dir).clamp(0, wheel_tabs as isize - 1) as usize;
+            if next != this.active {
+                this.active = next;
+                cx.notify();
+            }
+        }));
 
         strip
     }

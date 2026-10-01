@@ -12,7 +12,7 @@ use gpui_kit::{
 };
 
 use crate::icons;
-use crate::keys::{CloseAppMenu, ToolAction};
+use crate::keys::{CloseAppMenu, ToggleRibbonMinimize, ToolAction};
 use crate::office_widgets::office_theme;
 use crate::ribbon::RibbonBar;
 use crate::state::{self, AppEvent};
@@ -227,9 +227,17 @@ impl Render for Workspace {
             self.ribbon
                 .update(cx, |r, cx| r.render_app_menu(cx).into_any_element())
         } else {
+            // dock 区点击收回最小化临时展开层（FR：点外部收回）
             div()
+                .id("dock-area-host")
                 .flex_1()
                 .min_h_0()
+                .on_mouse_down(gpui_kit::MouseButton::Left, |_, _, cx| {
+                    let snap = state::ribbon_snapshot(cx);
+                    if snap.ribbon_transient_open {
+                        state::set_ribbon_transient_open(false, cx);
+                    }
+                })
                 .child(self.dock_area.clone())
                 .into_any_element()
         };
@@ -245,6 +253,11 @@ impl Render for Workspace {
             }))
             .on_action(cx.listener(|this, _: &CloseAppMenu, _, cx| {
                 this.ribbon.update(cx, |r, cx| r.close_app_menu(cx));
+            }))
+            .on_action(cx.listener(|this, _: &ToggleRibbonMinimize, _, cx| {
+                let minimized = state::ribbon_snapshot(cx).ribbon_minimized;
+                state::set_ribbon_minimized(!minimized, cx);
+                let _ = this;
             }))
             .child(ribbon_el)
             .child(body)
